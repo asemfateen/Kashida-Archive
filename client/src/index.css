@@ -1,0 +1,56 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+.masonry-grid {
+  column-count: 1;
+  column-gap: 12px;
+}
+@media (min-width: 640px) {
+  .masonry-grid {
+    column-count: 2;
+  }
+}
+@media (min-width: 1024px) {
+  .masonry-grid {
+    column-count: 3;
+  }
+}
+@media (min-width: 1440px) {
+  .masonry-grid {
+    column-count: 4;
+  }
+}
+.masonry-item {
+  break-inside: avoid;
+  margin-bottom: 12px;
+}
+
+.photo-card:hover .photo-metadata,
+.photo-card:hover .photo-actions {
+  opacity: 1;
+}
+
+.progress-bar-anim {
+  animation: progress 2s ease-in-out infinite alternate;
+}
+@keyframes progress {
+  0% {
+    width: 30%;
+  }
+  100% {
+    width: 85%;
+  }
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background-color: #c5c6cd;
+  border-radius: 3px;
+}

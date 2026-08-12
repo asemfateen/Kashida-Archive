@@ -1,0 +1,60 @@
+name: API Tests + Client Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  server-tests:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: smart_archive
+          POSTGRES_PASSWORD: smart_archive
+          POSTGRES_DB: smart_image_archive
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U smart_archive"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+      - name: Install server deps
+        working-directory: server
+        run: npm ci
+      - name: Apply schema
+        working-directory: server
+        run: npm run db:init
+        env:
+          DATABASE_URL: postgres://smart_archive:smart_archive@localhost:5432/smart_image_archive
+      - name: Run API tests
+        working-directory: server
+        run: npm test
+        env:
+          DATABASE_URL: postgres://smart_archive:smart_archive@localhost:5432/smart_image_archive
+
+  client-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+      - name: Install client deps
+        working-directory: client
+        run: npm ci
+      - name: Build
+        working-directory: client
+        run: npm run build

@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>NewsLens - Main Dashboard</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&amp;family=JetBrains+Mono:wght@400&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "error": "#ba1a1a",
+                        "primary-fixed-dim": "#bcc7de",
+                        "on-secondary": "#ffffff",
+                        "on-primary-container": "#8590a6",
+                        "secondary": "#5c5f61",
+                        "surface-container": "#e5eeff",
+                        "tertiary": "#001624",
+                        "on-tertiary-fixed-variant": "#004c6e",
+                        "surface-container-highest": "#d3e4fe",
+                        "on-surface-variant": "#45474c",
+                        "tertiary-fixed-dim": "#89ceff",
+                        "tertiary-container": "#002c42",
+                        "tertiary-fixed": "#c9e6ff",
+                        "inverse-primary": "#bcc7de",
+                        "background": "#f8f9ff",
+                        "on-primary": "#ffffff",
+                        "on-tertiary-container": "#0099d9",
+                        "on-background": "#0b1c30",
+                        "surface-container-low": "#eff4ff",
+                        "surface-container-lowest": "#ffffff",
+                        "surface-tint": "#545f73",
+                        "inverse-on-surface": "#eaf1ff",
+                        "secondary-fixed": "#e0e3e5",
+                        "primary": "#091426",
+                        "surface-container-high": "#dce9ff",
+                        "surface-dim": "#cbdbf5",
+                        "error-container": "#ffdad6",
+                        "on-primary-fixed": "#111c2d",
+                        "on-error-container": "#93000a",
+                        "secondary-container": "#e0e3e5",
+                        "on-secondary-fixed": "#191c1e",
+                        "on-error": "#ffffff",
+                        "primary-fixed": "#d8e3fb",
+                        "surface-bright": "#f8f9ff",
+                        "on-primary-fixed-variant": "#3c475a",
+                        "outline-variant": "#c5c6cd",
+                        "primary-container": "#1e293b",
+                        "surface-variant": "#d3e4fe",
+                        "on-tertiary": "#ffffff",
+                        "on-surface": "#0b1c30",
+                        "outline": "#75777d",
+                        "on-secondary-fixed-variant": "#444749",
+                        "surface": "#f8f9ff",
+                        "on-secondary-container": "#626567",
+                        "on-tertiary-fixed": "#001e2f",
+                        "inverse-surface": "#213145",
+                        "secondary-fixed-dim": "#c4c7c9"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "spacing": {
+                        "panel-width-fixed": "320px",
+                        "margin-page": "24px",
+                        "grid-gap": "12px",
+                        "unit": "4px",
+                        "gutter": "16px"
+                    },
+                    "fontFamily": {
+                        "headline-md": ["Inter"],
+                        "body-sm": ["Inter"],
+                        "body-md": ["Inter"],
+                        "label-caps": ["Inter"],
+                        "title-sm": ["Inter"],
+                        "display-lg": ["Inter"],
+                        "mono-data": ["JetBrains Mono"]
+                    },
+                    "fontSize": {
+                        "headline-md": ["24px", { "lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "600" }],
+                        "body-sm": ["13px", { "lineHeight": "18px", "fontWeight": "400" }],
+                        "body-md": ["14px", { "lineHeight": "20px", "fontWeight": "400" }],
+                        "label-caps": ["11px", { "lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "700" }],
+                        "title-sm": ["16px", { "lineHeight": "24px", "fontWeight": "600" }],
+                        "display-lg": ["32px", { "lineHeight": "40px", "letterSpacing": "-0.02em", "fontWeight": "700" }],
+                        "mono-data": ["12px", { "lineHeight": "16px", "fontWeight": "400" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        .masonry-grid {
+            column-count: 1;
+            column-gap: 12px;
+        }
+        @media (min-width: 640px) { .masonry-grid { column-count: 2; } }
+        @media (min-width: 1024px) { .masonry-grid { column-count: 3; } }
+        @media (min-width: 1440px) { .masonry-grid { column-count: 4; } }
+        .masonry-item { break-inside: avoid; margin-bottom: 12px; }
+        
+        .photo-card:hover .photo-metadata, .photo-card:hover .photo-actions {
+            opacity: 1;
+        }
+        
+        /* Custom Scrollbar for dense lists */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background-color: #c5c6cd; border-radius: 3px; }
+    </style>
+</head>
+<body class="bg-background text-on-background h-screen overflow-hidden flex flex-col font-body-md text-body-md">
+<!-- TopNavBar -->
+<nav class="bg-surface-container-lowest dark:bg-primary border-b border-outline-variant dark:border-outline docked full-width top-0 z-50">
+<div class="flex justify-between items-center w-full px-margin-page py-unit h-16">
+<div class="flex items-center gap-gutter w-[320px]">
+<span class="font-headline-md text-headline-md text-primary dark:text-primary-fixed-dim tracking-tight font-semibold">NewsLens</span>
+</div>
+<div class="flex-1 max-w-2xl mx-4">
+<div class="relative w-full group">
+<span class="material-symbols-outlined absolute left-3 top-1/2 transform -translate-y-1/2 text-on-surface-variant pointer-events-none">search</span>
+<input class="w-full bg-[#F1F5F9] focus:bg-surface-container-lowest border-transparent focus:border-tertiary-container focus:ring-1 focus:ring-tertiary-container rounded-xl pl-10 pr-12 py-2.5 font-body-md text-body-md text-on-surface transition-colors placeholder-on-surface-variant outline-none" placeholder="Search news assets..." type="text"/>
+<div class="absolute right-3 top-1/2 transform -translate-y-1/2 flex items-center bg-surface-container-high px-1.5 py-0.5 rounded text-on-surface-variant font-mono-data text-mono-data">
+                        ⌘K
+                    </div>
+</div>
+</div>
+<div class="flex items-center gap-4 w-[320px] justify-end">
+<button class="text-on-surface-variant hover:bg-surface-container transition-colors p-2 rounded-full scale-95 active:opacity-80 transition-transform">
+<span class="material-symbols-outlined">notifications</span>
+</button>
+<button class="text-on-surface-variant hover:bg-surface-container transition-colors p-2 rounded-full scale-95 active:opacity-80 transition-transform">
+<span class="material-symbols-outlined">settings</span>
+</button>
+<button class="bg-tertiary text-on-tertiary px-4 py-2 rounded-lg font-title-sm text-title-sm hover:bg-tertiary-container transition-colors scale-95 active:opacity-80 transition-transform">
+                    Upload
+                </button>
+<img alt="User profile avatar" class="w-8 h-8 rounded-full border border-outline-variant object-cover ml-2" data-alt="A professional user profile avatar for a corporate application. A clear, well-lit headshot of an individual on a minimalist background. High-quality corporate aesthetic. Modern, clean styling." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCjLyQyJyvaNLak59fZ9-eL_p6uxzCAoir6zWmKzsXgyjDX7bw57YO3xuPqDmQjS2R2MXD8OoOctQpSjG3OIZSYqGcQsUUQa7Nw9_amU2hD-oLhcoBuRnzczP_-sxSBM8I7ElLE3zD4m54RGuWpb3yBMIFzHTInFxjsyhXxEiqz57nn9NXGf4ZU6U8phrKvB8tyP0wd-cph6THliZ9ScpYADQR4gRZE0whaJ4_H4xmO-vSWU2eRXvwrzA"/>
+</div>
+</div>
+</nav>
+<div class="flex flex-1 overflow-hidden relative top-[64px]">
+<!-- SideNavBar -->
+<aside class="bg-surface-container-low dark:bg-primary-container border-r border-outline-variant dark:border-outline fixed left-0 top-16 h-[calc(100vh-64px)] w-panel-width-fixed flex flex-col p-4 z-40">
+<div class="mb-6 px-4">
+<h2 class="font-headline-md text-headline-md text-primary">Library</h2>
+<p class="font-body-sm text-body-sm text-on-surface-variant">News Assets</p>
+</div>
+<nav class="flex-1 flex flex-col gap-1 font-label-caps text-label-caps">
+<!-- Active Item: All Photos matches "All Photos" from intent -->
+<a class="flex items-center gap-gutter bg-surface-container-high dark:bg-on-primary-fixed-variant text-primary dark:text-primary-fixed-dim rounded-xl px-4 py-3 hover:bg-surface-container-highest dark:hover:bg-on-primary-fixed-variant transition-all translate-x-1 transition-transform" href="#">
+<span class="material-symbols-outlined" data-icon="photo_library" data-weight="fill" style="font-variation-settings: 'FILL' 1;">photo_library</span>
+                    All Photos
+                </a>
+<a class="flex items-center gap-gutter text-on-surface-variant dark:text-secondary-fixed-dim px-4 py-3 hover:bg-surface-container-highest dark:hover:bg-on-primary-fixed-variant transition-all translate-x-1 transition-transform" href="#">
+<span class="material-symbols-outlined" data-icon="schedule">schedule</span>
+                    Recent
+                </a>
+<a class="flex items-center gap-gutter text-on-surface-variant dark:text-secondary-fixed-dim px-4 py-3 hover:bg-surface-container-highest dark:hover:bg-on-primary-fixed-variant transition-all translate-x-1 transition-transform" href="#">
+<span class="material-symbols-outlined" data-icon="star">star</span>
+                    Favorites
+                </a>
+<a class="flex items-center gap-gutter text-on-surface-variant dark:text-secondary-fixed-dim px-4 py-3 hover:bg-surface-container-highest dark:hover:bg-on-primary-fixed-variant transition-all translate-x-1 transition-transform" href="#">
+<span class="material-symbols-outlined" data-icon="auto_awesome_motion">auto_awesome_motion</span>
+                    Collections
+                </a>
+<a class="flex items-center gap-gutter text-on-surface-variant dark:text-secondary-fixed-dim px-4 py-3 hover:bg-surface-container-highest dark:hover:bg-on-primary-fixed-variant transition-all translate-x-1 transition-transform" href="#">
+<span class="material-symbols-outlined" data-icon="delete">delete</span>
+                    Trash
+                </a>
+</nav>
+<div class="mt-auto pt-4 border-t border-outline-variant flex flex-col gap-1 font-label-caps text-label-caps">
+<a class="flex items-center gap-gutter text-on-surface-variant dark:text-secondary-fixed-dim px-4 py-3 hover:bg-surface-container-highest transition-all" href="#">
+<span class="material-symbols-outlined" data-icon="help">help</span>
+                    Help
+                </a>
+<a class="flex items-center gap-gutter text-on-surface-variant dark:text-secondary-fixed-dim px-4 py-3 hover:bg-surface-container-highest transition-all" href="#">
+<span class="material-symbols-outlined" data-icon="chat_bubble">chat_bubble</span>
+                    Feedback
+                </a>
+<button class="mt-4 w-full bg-surface-container text-primary px-4 py-2 rounded-lg font-title-sm text-title-sm hover:bg-surface-container-highest transition-colors border border-outline-variant">
+                    Saved Searches
+                </button>
+</div>
+</aside>
+<!-- Main Content Canvas -->
+<main class="flex-1 ml-[320px] mr-[320px] bg-background overflow-y-auto flex flex-col relative h-[calc(100vh-64px)]">
+<!-- Filter Bar -->
+<div class="sticky top-0 z-30 bg-background/90 backdrop-blur-md border-b border-outline-variant px-margin-page py-3 flex items-center justify-between">
+<div class="flex gap-2 font-body-sm text-body-sm">
+<button class="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-outline-variant bg-surface-container-lowest hover:bg-surface-container-low transition-colors text-on-surface">
+<span class="material-symbols-outlined text-[18px]">calendar_today</span>
+                        Date
+                        <span class="material-symbols-outlined text-[16px]">arrow_drop_down</span>
+</button>
+<button class="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-outline-variant bg-surface-container-lowest hover:bg-surface-container-low transition-colors text-on-surface">
+<span class="material-symbols-outlined text-[18px]">filter_alt</span>
+                        Type
+                        <span class="material-symbols-outlined text-[16px]">arrow_drop_down</span>
+</button>
+<button class="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-outline-variant bg-surface-container-lowest hover:bg-surface-container-low transition-colors text-on-surface">
+<span class="material-symbols-outlined text-[18px]">crop</span>
+                        Orientation
+                        <span class="material-symbols-outlined text-[16px]">arrow_drop_down</span>
+</button>
+</div>
+<div class="text-on-surface-variant font-mono-data text-mono-data">
+                    24,591 Results
+                </div>
+</div>
+<!-- Asset Grid -->
+<div class="p-margin-page masonry-grid pb-24">
+<!-- Image Card 1 -->
+<div class="masonry-item relative group photo-card rounded bg-surface-container-lowest border border-outline-variant overflow-hidden shadow-[0px_10px_15px_rgba(0,0,0,0.05)] cursor-pointer">
+<img class="w-full object-cover" data-alt="A high-impact breaking news photograph capturing a dense crowd at a political rally. High tension, dynamic composition, dramatic natural lighting. Photojournalism style, realistic, stark contrast between light and shadows." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDcL5LkKy7AsU7vVumUDswgM34dkG3bgzV8G_EHbmzHkF06FdvK2W5-60bW7rs_zhng2Kw1146gxPTvI9_d3n52IPQ03nT3kC4SuQgPbl9G3VGHjnYOrDuG06OShyZet8XcEdNTM22rl7XDMWEJ8EtlTF70JMLKaUAM3wfLzlRHpEH9OxLhBr0KBBpsa7wzGpLtUbRb6ZQIp3Imwb1YCUnVk9mxG_ws2g7pRh8qdXmisz5rWEB-L13Gtg"/>
+<div class="absolute inset-0 border-[3px] border-transparent group-hover:border-tertiary-container transition-colors z-10 pointer-events-none"></div>
+<!-- Actions Overlay -->
+<div class="photo-actions absolute top-2 left-2 right-2 flex justify-between opacity-0 transition-opacity z-20">
+<button class="w-6 h-6 rounded bg-surface-container-lowest/80 backdrop-blur flex items-center justify-center border border-outline-variant hover:bg-surface-container-lowest">
+<span class="material-symbols-outlined text-[16px]">check_box_outline_blank</span>
+</button>
+<div class="flex gap-1">
+<button class="w-6 h-6 rounded bg-surface-container-lowest/80 backdrop-blur flex items-center justify-center border border-outline-variant hover:bg-surface-container-lowest">
+<span class="material-symbols-outlined text-[16px]">star</span>
+</button>
+<button class="w-6 h-6 rounded bg-surface-container-lowest/80 backdrop-blur flex items-center justify-center border border-outline-variant hover:bg-surface-container-lowest">
+<span class="material-symbols-outlined text-[16px]">download</span>
+</button>
+</div>
+</div>
+<!-- Metadata Overlay -->
+<div class="photo-metadata absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-3 pt-8 opacity-0 transition-opacity z-20 text-white">
+<p class="font-label-caps text-label-caps mb-1">POLITICS</p>
+<p class="font-body-sm text-body-sm truncate">Rally downtown amidst rising tensions.</p>
+<p class="font-mono-data text-mono-data text-white/70 mt-1">AP/2023-10-24</p>
+</div>
+</div>
+<!-- Image Card 2 -->
+<div class="masonry-item relative group photo-card rounded bg-surface-container-lowest border border-outline-variant overflow-hidden shadow-[0px_10px_15px_rgba(0,0,0,0.05)] cursor-pointer">
+<div class="aspect-[3/4] bg-surface-variant flex items-center justify-center relative">
+<img class="absolute inset-0 w-full h-full object-cover" data-alt="A striking portrait of an environmental activist in a natural setting. Deep, rich greens and earthy tones. Professional studio-quality lighting applied outdoors. High resolution, intense focus on the subject's expression." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCirhUckfyeqXVOAOMD3l8FVPROuhPQHmZui0I0SRG8lLbDSSoGLviSclBUEADBYE2ELViNBLesQlb0r6OaxeS4i4QWL5LABilVeNZcPEztIn8rCl3hqMZrBxuoOoprBobEiqchP0lUy1alRgGJQHa96DsDTRNbXaW7Y5AZHT7j2pgWGnRZk_dbG6cX8bFuMYa_5QfZy11XebrvPVPOAq-7AG8_Utbuf2nfwBkae_yjmK8ZDAUK-6Ausw"/>
+</div>
+<div class="absolute inset-0 border-[3px] border-transparent group-hover:border-tertiary-container transition-colors z-10 pointer-events-none"></div>
+<div class="photo-actions absolute top-2 left-2 right-2 flex justify-between opacity-0 transition-opacity z-20">
+<button class="w-6 h-6 rounded bg-surface-container-lowest/80 backdrop-blur flex items-center justify-center border border-outline-variant hover:bg-surface-container-lowest text-tertiary-container">
+<span class="material-symbols-outlined text-[16px]" style="font-variation-settings: 'FILL' 1;">check_box</span>
+</button>
+<div class="flex gap-1">
+<button class="w-6 h-6 rounded bg-surface-container-lowest/80 backdrop-blur flex items-center justify-center border border-outline-variant hover:bg-surface-container-lowest">
+<span class="material-symbols-outlined text-[16px]">star</span>
+</button>
+<button class="w-6 h-6 rounded bg-surface-container-lowest/80 backdrop-blur flex items-center justify-center border border-outline-variant hover:bg-surface-container-lowest">
+<span class="material-symbols-outlined text-[16px]">download</span>
+</button>
+</div>
+</div>
+<div class="photo-metadata absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-3 pt-8 opacity-0 transition-opacity z-20 text-white">
+<p class="font-label-caps text-label-caps mb-1 text-tertiary-fixed">PORTRAIT</p>
+<p class="font-body-sm text-body-sm truncate">Activist profile series.</p>
+<p class="font-mono-data text-mono-data text-white/70 mt-1">Getty/2023-10-23</p>
+</div>
+</div>
+<!-- Image Card 3 -->
+<div class="masonry-item relative group photo-card rounded bg-surface-container-lowest border border-outline-variant overflow-hidden shadow-[0px_10px_15px_rgba(0,0,0,0.05)] cursor-pointer">
+<img class="w-full object-cover" data-alt="A wide-angle environmental shot showing the aftermath of a severe storm. Grey, overcast skies, muted color palette reflecting devastation. High detailed, documentary style news photography capturing infrastructure damage." src="https://lh3.googleusercontent.com/aida-public/AB6AXuD9Pjst6Rvc8wZ6A2R2UM2z61x0Jz5BFs2YGftgAL-dliE3rUn408KAjYpX-ii1gX_PRRUyXI3ajOsWfHQWo29G6jLWAkreEupavE4XjLV7DBAR4vD3A0KtLP6SAlN9cH8rARMCiKRWxkVgRFUYaXVFcEO_HFrIuqGter5QFx0Zj_SQThn_It3fv9h8vpdUnnfWs9wTMPhSMqCN2rx-kpLqRHkN4syUT5fKaIKq63AOTYD0iDRaF0Y8tg"/>
+<div class="absolute inset-0 border-[3px] border-transparent group-hover:border-tertiary-container transition-colors z-10 pointer-events-none"></div>
+<div class="photo-actions absolute top-2 left-2 right-2 flex justify-between opacity-0 transition-opacity z-20">
+<button class="w-6 h-6 rounded bg-surface-container-lowest/80 backdrop-blur flex items-center justify-center border border-outline-variant hover:bg-surface-container-lowest">
+<span class="material-symbols-outlined text-[16px]">check_box_outline_blank</span>
+</button>
+<div class="flex gap-1">
+<button class="w-6 h-6 rounded bg-surface-container-lowest/80 backdrop-blur flex items-center justify-center border border-outline-variant hover:bg-surface-container-lowest text-[#eab308]">
+<span class="material-symbols-outlined text-[16px]" style="font-variation-settings: 'FILL' 1;">star</span>
+</button>
+<button class="w-6 h-6 rounded bg-surface-container-lowest/80 backdrop-blur flex items-center justify-center border border-outline-variant hover:bg-surface-container-lowest">
+<span class="material-symbols-outlined text-[16px]">download</span>
+</button>
+</div>
+</div>
+<div class="photo-metadata absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-3 pt-8 opacity-0 transition-opacity z-20 text-white">
+<p class="font-label-caps text-label-caps mb-1">ENVIRONMENT</p>
+<p class="font-body-sm text-body-sm truncate">Storm damage assessment.</p>
+<p class="font-mono-data text-mono-data text-white/70 mt-1">Reuters/2023-10-22</p>
+</div>
+</div>
+</div>
+<!-- Timeline Slider (Bottom of Grid) -->
+<div class="fixed bottom-0 left-[320px] right-[320px] h-12 bg-surface-container-lowest/90 backdrop-blur border-t border-outline-variant px-margin-page flex items-center gap-4 z-30">
+<span class="font-mono-data text-mono-data text-on-surface-variant">2023</span>
+<div class="flex-1 h-1 bg-surface-container-high rounded-full relative">
+<div class="absolute left-1/4 right-1/4 h-full bg-tertiary-container rounded-full"></div>
+<div class="absolute left-1/4 top-1/2 -translate-y-1/2 -ml-2 w-4 h-4 bg-tertiary rounded-full shadow border border-surface-container-lowest"></div>
+<div class="absolute right-1/4 top-1/2 -translate-y-1/2 -mr-2 w-4 h-4 bg-tertiary rounded-full shadow border border-surface-container-lowest"></div>
+</div>
+<span class="font-mono-data text-mono-data text-on-surface-variant">Today</span>
+</div>
+</main>
+<!-- Right Side Panel (Metadata / Tags) -->
+<aside class="w-[320px] bg-surface-container-lowest border-l border-outline-variant fixed right-0 top-16 h-[calc(100vh-64px)] z-40 flex flex-col p-4 overflow-y-auto shadow-[0px_10px_15px_rgba(0,0,0,0.05)]">
+<div class="mb-6">
+<h3 class="font-title-sm text-title-sm text-on-surface mb-4 border-b border-outline-variant pb-2">Recent Tags</h3>
+<div class="flex flex-col gap-2">
+<div class="group flex items-center justify-between p-2 rounded hover:bg-surface-container-low transition-colors cursor-pointer">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-on-surface-variant text-[18px]">label</span>
+<span class="font-body-sm text-body-sm text-on-surface">Politics</span>
+</div>
+<span class="font-mono-data text-mono-data text-on-surface-variant opacity-0 group-hover:opacity-100 transition-opacity">1
+</span></div>
+<div class="group flex items-center justify-between p-2 rounded hover:bg-surface-container-low transition-colors cursor-pointer">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-on-surface-variant text-[18px]">label</span>
+<span class="font-body-sm text-body-sm text-on-surface">Sports</span>
+</div>
+<span class="font-mono-data text-mono-data text-on-surface-variant opacity-0 group-hover:opacity-100 transition-opacity">2
+</span></div>
+<div class="group flex items-center justify-between p-2 rounded hover:bg-surface-container-low transition-colors cursor-pointer">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-on-surface-variant text-[18px]">label</span>
+<span class="font-body-sm text-body-sm text-on-surface">Environment</span>
+</div>
+<span class="font-mono-data text-mono-data text-on-surface-variant opacity-0 group-hover:opacity-100 transition-opacity">3
+</span></div>
+</div>
+</div>
+<div class="mt-4">
+<h3 class="font-title-sm text-title-sm text-on-surface mb-4 border-b border-outline-variant pb-2">Quick Actions</h3>
+<div class="grid grid-cols-2 gap-2">
+<button class="p-2 border border-outline-variant rounded flex flex-col items-center justify-center gap-1 hover:bg-surface-container-low transition-colors text-on-surface-variant">
+<span class="material-symbols-outlined text-[20px]">file_download</span>
+<span class="font-label-caps text-label-caps">Export</span>
+</button>
+<button class="p-2 border border-outline-variant rounded flex flex-col items-center justify-center gap-1 hover:bg-surface-container-low transition-colors text-on-surface-variant">
+<span class="material-symbols-outlined text-[20px]">share</span>
+<span class="font-label-caps text-label-caps">Share</span>
+</button>
+</div>
+</div>
+<div class="mt-auto pt-4 border-t border-outline-variant">
+<label class="font-label-caps text-label-caps text-on-surface-variant block mb-1">Quick-tag Input</label>
+<div class="relative">
+<input class="w-full bg-surface-container-lowest border border-outline-variant focus:border-tertiary-container focus:ring-1 focus:ring-tertiary-container rounded p-2 font-body-sm text-body-sm text-on-surface outline-none" placeholder="Add tag..." type="text"/>
+<button class="absolute right-2 top-1/2 transform -translate-y-1/2 text-tertiary-container">
+<span class="material-symbols-outlined text-[18px]">add</span>
+</button>
+</div>
+</div>
+</aside>
+</div>
+</body></html>

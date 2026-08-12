@@ -1,0 +1,254 @@
+<!DOCTYPE html><html class="light" lang="en" style=""><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>NewsLens - Asset Detail</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&amp;family=JetBrains+Mono:wght@400&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "error": "#ba1a1a",
+                        "primary-fixed-dim": "#bcc7de",
+                        "on-secondary": "#ffffff",
+                        "on-primary-container": "#8590a6",
+                        "secondary": "#5c5f61",
+                        "surface-container": "#e5eeff",
+                        "tertiary": "#001624",
+                        "on-tertiary-fixed-variant": "#004c6e",
+                        "surface-container-highest": "#d3e4fe",
+                        "on-surface-variant": "#45474c",
+                        "tertiary-fixed-dim": "#89ceff",
+                        "tertiary-container": "#002c42",
+                        "tertiary-fixed": "#c9e6ff",
+                        "inverse-primary": "#bcc7de",
+                        "background": "#f8f9ff",
+                        "on-primary": "#ffffff",
+                        "on-tertiary-container": "#0099d9",
+                        "on-background": "#0b1c30",
+                        "surface-container-low": "#eff4ff",
+                        "surface-container-lowest": "#ffffff",
+                        "surface-tint": "#545f73",
+                        "inverse-on-surface": "#eaf1ff",
+                        "secondary-fixed": "#e0e3e5",
+                        "primary": "#091426",
+                        "surface-container-high": "#dce9ff",
+                        "surface-dim": "#cbdbf5",
+                        "error-container": "#ffdad6",
+                        "on-primary-fixed": "#111c2d",
+                        "on-error-container": "#93000a",
+                        "secondary-container": "#e0e3e5",
+                        "on-secondary-fixed": "#191c1e",
+                        "on-error": "#ffffff",
+                        "primary-fixed": "#d8e3fb",
+                        "surface-bright": "#f8f9ff",
+                        "on-primary-fixed-variant": "#3c475a",
+                        "outline-variant": "#c5c6cd",
+                        "primary-container": "#1e293b",
+                        "surface-variant": "#d3e4fe",
+                        "on-tertiary": "#ffffff",
+                        "on-surface": "#0b1c30",
+                        "outline": "#75777d",
+                        "on-secondary-fixed-variant": "#444749",
+                        "surface": "#f8f9ff",
+                        "on-secondary-container": "#626567",
+                        "on-tertiary-fixed": "#001e2f",
+                        "inverse-surface": "#213145",
+                        "secondary-fixed-dim": "#c4c7c9"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "spacing": {
+                        "panel-width-fixed": "320px",
+                        "margin-page": "24px",
+                        "grid-gap": "12px",
+                        "unit": "4px",
+                        "gutter": "16px"
+                    },
+                    "fontFamily": {
+                        "headline-md": ["Inter"],
+                        "body-sm": ["Inter"],
+                        "body-md": ["Inter"],
+                        "label-caps": ["Inter"],
+                        "title-sm": ["Inter"],
+                        "display-lg": ["Inter"],
+                        "mono-data": ["JetBrains Mono"]
+                    },
+                    "fontSize": {
+                        "headline-md": ["24px", { "lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "600" }],
+                        "body-sm": ["13px", { "lineHeight": "18px", "fontWeight": "400" }],
+                        "body-md": ["14px", { "lineHeight": "20px", "fontWeight": "400" }],
+                        "label-caps": ["11px", { "lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "700" }],
+                        "title-sm": ["16px", { "lineHeight": "24px", "fontWeight": "600" }],
+                        "display-lg": ["32px", { "lineHeight": "40px", "letterSpacing": "-0.02em", "fontWeight": "700" }],
+                        "mono-data": ["12px", { "lineHeight": "16px", "fontWeight": "400" }]
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-background text-on-background font-body-md text-body-md h-screen overflow-hidden flex flex-col">
+<!-- TopNavBar (Shared Component) -->
+<nav class="bg-surface-container-lowest border-b border-outline-variant flex justify-between items-center w-full px-margin-page py-unit h-16 z-50">
+<div class="flex items-center gap-gutter">
+<span class="font-headline-md text-headline-md text-primary">NewsLens</span>
+<div class="ml-8 flex items-center bg-surface-container-low rounded-lg border border-outline-variant px-3 py-1.5 focus-within:bg-surface-container-lowest focus-within:border-tertiary-container transition-colors">
+<span class="material-symbols-outlined text-on-surface-variant mr-2" style="font-size: 20px;">search</span>
+<input class="bg-transparent border-none outline-none text-body-sm text-on-surface w-64 placeholder-on-surface-variant focus:ring-0 p-0" placeholder="Search assets... (Cmd+K)" type="text">
+</div>
+</div>
+<div class="flex items-center gap-gutter">
+<div class="flex gap-4">
+<a class="text-on-surface-variant hover:bg-surface-container transition-colors p-2 rounded-full flex items-center justify-center scale-95 active:opacity-80 transition-transform" href="#">
+<span class="material-symbols-outlined" data-icon="notifications">notifications</span>
+</a>
+<a class="text-on-surface-variant hover:bg-surface-container transition-colors p-2 rounded-full flex items-center justify-center scale-95 active:opacity-80 transition-transform" href="#">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+</a>
+</div>
+<button class="bg-tertiary text-on-tertiary font-label-caps text-label-caps px-4 py-2 rounded-DEFAULT hover:bg-tertiary-container transition-colors">Upload</button>
+<div class="w-8 h-8 rounded-full bg-surface-container-high border border-outline-variant overflow-hidden ml-2">
+<img alt="User profile avatar" class="w-full h-full object-cover" data-alt="A professional headshot of a photo editor in a brightly lit, modern newsroom environment. Light mode aesthetic with cool, neutral tones. The subject is wearing a simple dark blue shirt. The background is slightly blurred showing computer monitors and a busy news desk." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAzGMfWzD4dgbInC8QYi0eN6XUxwqKyLLBg9qocBJtTOWESrd7-Qet6I7DvTWstyjjW_I3nKOg3WOMDzzlOQ6LSrW46wUcMQc77JngVg-TFawUL9uZSCdf6wt6X4Wt2kyeSvt3mKH2-xTLkaZtd3wwUnHlF36hVnHPkAsrE_jQR-ZqQMG_DA2V_NsSXqKwlnYXi1PC9nLZi-rn3wb2h646eHsloRloL_EF7HA8wkUvjaCytegw-PbwERw">
+</div>
+</div>
+</nav>
+<div class="flex flex-1 overflow-hidden">
+<!-- Main Content Canvas (Asset View) -->
+<main class="flex-1 bg-surface-bright flex flex-col relative">
+<!-- Asset Toolbar -->
+<div class="h-12 border-b border-outline-variant bg-surface-container-lowest flex items-center justify-between px-margin-page">
+<div class="flex items-center gap-4">
+<button class="text-on-surface-variant hover:text-on-surface flex items-center gap-1 transition-colors">
+<span class="material-symbols-outlined" style="font-size: 18px;">arrow_back</span>
+<span class="font-label-caps text-label-caps">Back to Grid</span>
+</button>
+<div class="w-px h-4 bg-outline-variant"></div>
+<span class="font-mono-data text-mono-data text-secondary">DSC_0492_ELECTION_2024.RAW</span>
+</div>
+<div class="flex items-center gap-2">
+<button class="w-8 h-8 flex items-center justify-center rounded hover:bg-surface-container text-on-surface-variant transition-colors" title="Previous Asset (Left Arrow)">
+<span class="material-symbols-outlined">chevron_left</span>
+</button>
+<span class="font-mono-data text-mono-data text-secondary px-2">42 / 1024</span>
+<button class="w-8 h-8 flex items-center justify-center rounded hover:bg-surface-container text-on-surface-variant transition-colors" title="Next Asset (Right Arrow)">
+<span class="material-symbols-outlined">chevron_right</span>
+</button>
+</div>
+</div>
+<!-- Image Viewer -->
+<div class="flex-1 p-margin-page flex items-center justify-center bg-background overflow-hidden">
+<div class="relative w-full h-full flex items-center justify-center">
+<img alt="Current Asset" class="max-w-full max-h-full object-contain shadow-sm border border-outline-variant rounded-DEFAULT bg-surface-container-lowest" data-alt="A high-resolution photojournalistic image capturing a large, intense political protest outside a grand, neoclassical capitol building. The lighting is harsh daylight, casting sharp shadows. The crowd is dense, holding signs, with a clear focus on a central figure passionately speaking. The overall tone is urgent, authoritative, and historically significant, typical of front-page news photography in a modern light-mode editorial context." src="https://lh3.googleusercontent.com/aida-public/AB6AXuB7GapH3m_JUBRzbF9iI2FgpaMIJD-30ESi1Zzm5BtT5tFwSSkR3I2irz2dpIkuXAoNmqKcr6aiwYiJrnPFrlVEtbt_5jnCltmBplMsBNrC0Cycph8jkh8FdPvDh_AuwAKQAWuDG8TGqBj0CEDiCIXvu2X19xUAAIq3wvNrmWUjvxDJceNXm5GfgFPaEv2WAOUMIyL6O-LlcwiPgAqtO0m6vhVUDUVN3ee84J1hQDtUSUSR5_l1QRaMgw">
+<!-- Zoom/Pan Controls Overlay -->
+<div class="absolute bottom-4 right-4 flex bg-surface-container-lowest border border-outline-variant rounded-DEFAULT shadow-sm">
+<button class="p-2 hover:bg-surface-container text-on-surface-variant transition-colors border-r border-outline-variant"><span class="material-symbols-outlined" style="font-size: 20px;">zoom_out</span></button>
+<button class="p-2 hover:bg-surface-container text-on-surface-variant transition-colors border-r border-outline-variant"><span class="font-mono-data text-mono-data px-2">Fit</span></button>
+<button class="p-2 hover:bg-surface-container text-on-surface-variant transition-colors"><span class="material-symbols-outlined" style="font-size: 20px;">zoom_in</span></button>
+</div>
+</div>
+</div>
+<!-- Quick Action Bar -->
+<div class="h-12 border-t border-outline-variant bg-surface-container-lowest flex items-center justify-center gap-6">
+<button class="flex items-center gap-2 text-on-surface-variant hover:text-on-surface transition-colors">
+<span class="material-symbols-outlined" style="font-size: 20px;">star</span>
+<span class="font-label-caps text-label-caps">Favorite</span>
+</button>
+<div class="w-px h-4 bg-outline-variant"></div>
+<button class="flex items-center gap-2 text-on-surface-variant hover:text-on-surface transition-colors">
+<span class="material-symbols-outlined" style="font-size: 20px;">download</span>
+<span class="font-label-caps text-label-caps">Download High-Res</span>
+</button>
+<div class="w-px h-4 bg-outline-variant"></div>
+<button class="flex items-center gap-2 text-on-surface-variant hover:text-error transition-colors">
+<span class="material-symbols-outlined" style="font-size: 20px;">delete</span>
+<span class="font-label-caps text-label-caps">Move to Trash</span>
+</button>
+</div>
+</main>
+<!-- Metadata & Tagging Panel (Fixed Right Sidebar) -->
+<aside class="w-panel-width-fixed bg-surface-container-lowest border-l border-outline-variant flex flex-col h-full overflow-y-auto">
+<div class="p-4 border-b border-outline-variant bg-surface-container-low flex justify-between items-center sticky top-0 z-10">
+<h2 class="font-title-sm text-title-sm text-on-surface">Metadata &amp; Tagging</h2>
+<button class="text-on-surface-variant hover:text-on-surface transition-colors"><span class="material-symbols-outlined" style="font-size: 20px;">more_horiz</span></button>
+</div>
+<div class="p-4 flex flex-col gap-6">
+<!-- Tagging Section -->
+<section>
+<div class="flex justify-between items-end mb-2">
+<label class="font-label-caps text-label-caps text-on-surface-variant">Tags</label>
+<span class="font-mono-data text-mono-data text-secondary text-[10px]">Cmd+T</span>
+</div>
+<!-- Existing Tags (Chips) -->
+<div class="flex flex-wrap gap-2 mb-3">
+<span class="inline-flex items-center gap-1 bg-surface-container-high border border-outline-variant text-on-surface font-body-sm text-body-sm px-2.5 py-1 rounded-full">
+                            Elections 2024
+                            <button class="text-on-surface-variant hover:text-error transition-colors"><span class="material-symbols-outlined" style="font-size: 14px;">close</span></button>
+</span>
+<span class="inline-flex items-center gap-1 bg-surface-container-high border border-outline-variant text-on-surface font-body-sm text-body-sm px-2.5 py-1 rounded-full">
+                            Capitol
+                            <button class="text-on-surface-variant hover:text-error transition-colors"><span class="material-symbols-outlined" style="font-size: 14px;">close</span></button>
+</span>
+<span class="inline-flex items-center gap-1 bg-surface-container-high border border-outline-variant text-on-surface font-body-sm text-body-sm px-2.5 py-1 rounded-full">
+                            Protest
+                            <button class="text-on-surface-variant hover:text-error transition-colors"><span class="material-symbols-outlined" style="font-size: 14px;">close</span></button>
+</span>
+<span class="inline-flex items-center gap-1 bg-surface-container-high border border-outline-variant text-on-surface font-body-sm text-body-sm px-2.5 py-1 rounded-full">
+                            Washington D.C.
+                            <button class="text-on-surface-variant hover:text-error transition-colors"><span class="material-symbols-outlined" style="font-size: 14px;">close</span></button>
+</span>
+</div>
+<!-- Auto-suggest Input -->
+<div class="relative">
+<input class="w-full bg-surface-bright border border-outline-variant rounded-DEFAULT px-3 py-2 text-body-sm text-on-surface focus:border-tertiary-container focus:ring-1 focus:ring-tertiary-container outline-none transition-colors" placeholder="Add tags..." type="text">
+<span class="material-symbols-outlined absolute right-3 top-2.5 text-on-surface-variant" style="font-size: 16px;">add</span>
+</div>
+</section>
+<hr class="border-outline-variant">
+<!-- Structured Data Section -->
+<section class="flex flex-col gap-4">
+<h3 class="font-label-caps text-label-caps text-on-surface-variant mb-1">File Details</h3>
+<div class="flex flex-col gap-1">
+<label class="font-label-caps text-label-caps text-secondary">Original Filename</label>
+<div class="flex items-center justify-between">
+<span class="font-mono-data text-mono-data text-on-surface truncate">DSC_0492_ELECTION_2024.RAW</span>
+<button class="text-on-surface-variant hover:text-on-surface transition-colors"><span class="material-symbols-outlined" style="font-size: 16px;">content_copy</span></button>
+</div>
+</div>
+<div class="flex flex-col gap-1">
+
+
+</div>
+<div class="flex flex-col gap-1">
+
+
+</div>
+<div class="flex flex-col gap-1">
+<label class="font-label-caps text-label-caps text-secondary">Date added</label>
+<span class="font-mono-data text-mono-data text-on-surface">2024-11-06T14:32:01Z</span>
+</div>
+
+</section>
+<hr class="border-outline-variant">
+<!-- Quick Apply Actions -->
+<section class="flex flex-col gap-2 pb-8">
+
+<div class="grid grid-cols-2 gap-2">
+
+
+</div>
+</section>
+</div>
+</aside>
+</div>
+
+
+</body></html>
