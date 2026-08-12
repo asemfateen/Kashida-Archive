@@ -13,6 +13,11 @@ const RETRY_DELAY_MS = parseInt(
 );
 
 export async function initDb({ log = true } = {}) {
+  if (log) {
+    console.log(
+      `[db] connecting via ${process.env.DATABASE_URL ? "DATABASE_URL" : "fallback localhost URL"} (${process.env.DATABASE_URL ? "postgresql://***@***/***" : "postgres://smart_archive:***@localhost:5432/smart_image_archive"})`,
+    );
+  }
   let lastErr = null;
   for (let attempt = 1; attempt <= RETRIES; attempt += 1) {
     try {
@@ -34,10 +39,13 @@ export async function initDb({ log = true } = {}) {
     } catch (err) {
       lastErr = err;
       if (log) {
+        const detail = err?.errors?.length
+          ? err.errors
+              .map((e) => `${e.code || e.name || "?"}: ${e.message}`)
+              .join(" | ")
+          : `${err?.code || err?.name || "?"}: ${err?.message || String(err)}`;
         console.error(
-          `[db] schema init attempt ${attempt}/${RETRIES} failed: ${
-            err?.message || String(err)
-          }`,
+          `[db] schema init attempt ${attempt}/${RETRIES} failed: ${detail}`,
         );
       }
       if (attempt < RETRIES)
