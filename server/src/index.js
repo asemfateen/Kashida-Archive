@@ -16,7 +16,14 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 const isProduction = process.env.NODE_ENV === "production";
-const dbReady = !isProduction || (await initDb());
+let dbReady = !isProduction;
+if (isProduction) {
+  try {
+    dbReady = await initDb();
+  } catch (err) {
+    dbReady = false;
+  }
+}
 
 app.use(cors());
 app.use(express.json({ limit: "15mb" }));
