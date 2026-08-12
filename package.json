@@ -1,0 +1,18 @@
+{
+  "name": "newslens",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "server",
+    "client"
+  ],
+  "scripts": {
+    "build": "npm run build -w client",
+    "start": "npm run db:init -w server && node server/src/index.js",
+    "test": "npm run test -w server"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

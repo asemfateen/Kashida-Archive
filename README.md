@@ -58,13 +58,13 @@ Integration suite (`node:test` + real Postgres) covering every route: validation
 
 ## Deploy (Railway)
 
-The repo root has no package.json — Railpack needs `start.sh` (committed, executable), which:
+The repo root has a `package.json` with npm workspaces (`server`, `client`) so Railpack detects Node:
 
-1. Installs server deps, applies the schema (`db:init`, idempotent) on every boot
-2. Builds the client once if `client/dist` is missing
-3. Runs the Express API on `$PORT`
+- `npm ci` at root installs both workspaces (root `package-lock.json` committed)
+- `npm run build` (root) builds the Vite client → `client/dist` ships in the image
+- `npm start` (root) runs the idempotent `db:init` migration, then the Express API on `$PORT`
 
-In production the API also serves the built client (SPA fallback for non-`/api` routes), so one service serves the whole app. Target root when creating the service, add a Postgres plugin, and set `DATABASE_URL` (+ optional R2/Gemini vars). The `db:init` inside `start.sh` handles migrations on deploy — schema is fully idempotent.
+In production the API also serves the built client (SPA fallback for non-`/api` routes), so one service serves the whole app. Target the repo root when creating the service, add a Postgres plugin, and set `DATABASE_URL` (+ optional R2/Gemini vars). Migrations run automatically on every boot — schema is fully idempotent.
 
 ## Env vars (`server/.env.example`)
 
