@@ -56,6 +56,16 @@ cd server && npm test
 
 Integration suite (`node:test` + real Postgres) covering every route: validation, duplicate 409s, favorites/trash views, soft delete/restore, search ranking + sort, injection attempts, and AI-tag guard rails. Runs in CI against a `postgres:15` service container.
 
+## Deploy (Railway)
+
+The repo root has no package.json — Railpack needs `start.sh` (committed, executable), which:
+
+1. Installs server deps, applies the schema (`db:init`, idempotent) on every boot
+2. Builds the client once if `client/dist` is missing
+3. Runs the Express API on `$PORT`
+
+In production the API also serves the built client (SPA fallback for non-`/api` routes), so one service serves the whole app. Target root when creating the service, add a Postgres plugin, and set `DATABASE_URL` (+ optional R2/Gemini vars). The `db:init` inside `start.sh` handles migrations on deploy — schema is fully idempotent.
+
 ## Env vars (`server/.env.example`)
 
 `PORT`, `DATABASE_URL`, `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME`, `R2_PUBLIC_BASE_URL`, `GEMINI_API_KEY`, `GEMINI_MODEL`

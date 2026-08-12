@@ -2,6 +2,8 @@ import "dotenv/config";
 import express from "express";
 import cors from "cors";
 import { randomUUID } from "node:crypto";
+import { existsSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { PutObjectCommand } from "@aws-sdk/client-s3";
 import { r2, R2_BUCKET, isR2Configured } from "./r2.js";
@@ -300,6 +302,16 @@ app.post("/api/images/tag", async (req, res) => {
     res.status(500).json({ error: "AI tagging failed" });
   }
 });
+
+const CLIENT_DIST = fileURLToPath(
+  new URL("../../client/dist/", import.meta.url),
+);
+if (process.env.NODE_ENV === "production" && existsSync(CLIENT_DIST)) {
+  app.use(express.static(CLIENT_DIST));
+  app.get(/^(?!\/api\/).*/, (_req, res) => {
+    res.sendFile(`${CLIENT_DIST}/index.html`);
+  });
+}
 
 let server;
 if (
