@@ -10,12 +10,28 @@ import { r2, R2_BUCKET, isR2Configured } from "./r2.js";
 import pool from "./db.js";
 import { ai, GEMINI_MODEL, isGeminiConfigured } from "./gemini.js";
 import { parseTags } from "./tagParser.js";
+import initDb from "./initDb.js";
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+const isProduction = process.env.NODE_ENV === "production";
+const dbReady = !isProduction || (await initDb());
+
 app.use(cors());
 app.use(express.json({ limit: "15mb" }));
+
+app.get("/api/health", (req, res) => {
+  res.json({ ok: true, service: "smart-image-archive", db: dbReady });
+});
+
+app.use("/api", (req, res, next) => {
+  if (dbReady) return next();
+  res.status(503).json({
+    error:
+      "database not ready — check DATABASE_URL or the server logs for the connection error",
+  });
+});
 
 const ALLOWED_EXTENSIONS = /\.(jpg|jpeg|png|webp|gif|heic|tiff|raw)$/i;
 
@@ -306,10 +322,20 @@ app.post("/api/images/tag", async (req, res) => {
 const CLIENT_DIST = fileURLToPath(
   new URL("../../client/dist/", import.meta.url),
 );
-if (process.env.NODE_ENV === "production" && existsSync(CLIENT_DIST)) {
+if (isProduction && existsSync(CLIENT_DIST)) {
   app.use(express.static(CLIENT_DIST));
   app.get(/^(?!\/api\/).*/, (_req, res) => {
-    res.sendFile(`${CLIENT_DIST}/index.html`);
+    if (dbReady) return res.sendFile(`${CLIENT_DIST}/index.html`);
+    res
+      .status(503)
+      .type("html")
+      .send(
+        `<!doctype html><html><body style="font-family:system-ui;background:#0b0f19;color:#e2e8f0;display:grid;place-items:center;height:100vh;margin:0">
+        <div style="max-width:560px;text-align:center"><h1>NewsLens</h1>
+        <p>Database is not ready.</p>
+        <p style="color:#94a3b8;font-size:14px">Add a Postgres plugin to this Railway service and set the <code>DATABASE_URL</code> variable to its connection string, then redeploy.</p>
+        <p style="color:#94a3b8;font-size:13px">Full cause: see the service logs — the API retries the migration on every boot.</p></div></body></html>`,
+      );
   });
 }
 

@@ -9,7 +9,7 @@
   ],
   "scripts": {
     "build": "npm run build -w client",
-    "start": "npm run db:init -w server && node server/src/index.js",
+    "start": "node server/src/index.js",
     "test": "npm run test -w server"
   },
   "engines": {
