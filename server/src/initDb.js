@@ -13,6 +13,12 @@ const RETRY_DELAY_MS = parseInt(
 );
 
 export async function initDb({ log = true } = {}) {
+  if (process.env.NODE_ENV === "production" && !process.env.DATABASE_URL) {
+    console.error("[db] DATABASE_URL is not set. In production, a Postgres database is required.");
+    console.error("[db] Set DATABASE_URL to a reachable Postgres, e.g. DATABASE_URL=postgresql://user:pass@host:5432/dbname");
+    throw new Error("DATABASE_URL environment variable is missing and required in production.");
+  }
+
   if (log) {
     console.log(
       `[db] connecting via ${process.env.DATABASE_URL ? "DATABASE_URL" : "fallback localhost URL"} (${process.env.DATABASE_URL ? "postgresql://***@***/***" : "postgres://smart_archive:***@localhost:5432/smart_image_archive"})`,
