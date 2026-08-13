@@ -1,4 +1,4 @@
-import "dotenv/config";
+import "./env.js";
 import express from "express";
 import cors from "cors";
 import { randomUUID } from "node:crypto";
@@ -18,26 +18,66 @@ const PORT = process.env.PORT || 3000;
 const isProduction = process.env.NODE_ENV === "production";
 let dbReady = false;
 
-// Initialize database asynchronously with error handling
-// App starts immediately even if DB init fails, allowing graceful degradation
-(async () => {
+// Initialize database asynchronously with error handling.
+// App starts immediately even if DB init fails, allowing graceful degradation,
+// and keeps retrying in the background so a transiently-unreachable DB at boot
+// does not leave the service 503 forever.
+async function ensureDb() {
+  if (dbReady) return;
   try {
     dbReady = await initDb();
   } catch (err) {
     console.error("[app] Database initialization failed:", err.message);
-    console.error("[app] App is running in degraded mode. API requests will return 503.");
-    // Don't crash the app — let it start and serve error pages
+    dbReady = false;
   }
-})();
+  if (!dbReady) {
+    console.error("[app] App is running in degraded mode. Retrying in 30s…");
+    setTimeout(ensureDb, 30000).unref();
+  }
+}
+// Await the first init attempt inside request handlers so a boot-time request
+// does not 503 while init is still racing to finish.
+const dbInit = ensureDb();
 
 app.use(cors());
 app.use(express.json({ limit: "15mb" }));
 
-app.get("/api/health", (req, res) => {
+// Minimal in-memory rate limiter for cost-bearing endpoints (no external deps).
+function makeRateLimit({ windowMs, max }) {
+  const hits = new Map();
+  const sweep = setInterval(() => {
+    const now = Date.now();
+    for (const [key, rec] of hits) {
+      if (now > rec.reset) hits.delete(key);
+    }
+  }, windowMs);
+  sweep.unref();
+  return (req, res, next) => {
+    const now = Date.now();
+    const rec = hits.get(req.ip) || { count: 0, reset: now + windowMs };
+    if (now > rec.reset) {
+      rec.count = 0;
+      rec.reset = now + windowMs;
+    }
+    rec.count += 1;
+    if (rec.count > max) {
+      return res.status(429).json({ error: "too many requests, slow down" });
+    }
+    hits.set(req.ip, rec);
+    next();
+  };
+}
+const RATE_UPLOAD = makeRateLimit({ windowMs: 60_000, max: 120 });
+const RATE_TAG = makeRateLimit({ windowMs: 60_000, max: 60 });
+
+app.get("/api/health", async (req, res) => {
+  await dbInit;
   res.json({ ok: true, service: "smart-image-archive", db: dbReady });
 });
 
-app.use("/api", (req, res, next) => {
+app.use("/api", async (req, res, next) => {
+  if (dbReady) return next();
+  await dbInit;
   if (dbReady) return next();
   res.status(503).json({
     error:
@@ -46,8 +86,9 @@ app.use("/api", (req, res, next) => {
 });
 
 const ALLOWED_EXTENSIONS = /\.(jpg|jpeg|png|webp|gif|heic|tiff|raw)$/i;
+const MIME_RE = /^[a-z0-9!#$&^_.+-]+\/[a-z0-9!#$&^_.+-]+$/i;
 
-app.post("/api/upload-url", async (req, res) => {
+app.post("/api/upload-url", RATE_UPLOAD, async (req, res) => {
   const { filename, contentType } = req.body || {};
 
   if (!filename || typeof filename !== "string") {
@@ -57,6 +98,15 @@ app.post("/api/upload-url", async (req, res) => {
   const extMatch = filename.match(ALLOWED_EXTENSIONS);
   if (!extMatch) {
     return res.status(400).json({ error: "unsupported file extension" });
+  }
+
+  if (
+    contentType !== undefined &&
+    (typeof contentType !== "string" ||
+      contentType.length > 200 ||
+      !MIME_RE.test(contentType))
+  ) {
+    return res.status(400).json({ error: "invalid contentType" });
   }
 
   if (!isR2Configured()) {
@@ -87,12 +137,17 @@ app.post("/api/upload-url", async (req, res) => {
 
 app.post("/api/images", async (req, res) => {
   const { objectKey, originalFilename } = req.body || {};
-  if (
-    !objectKey ||
+  const invalidKey =
     typeof objectKey !== "string" ||
-    !originalFilename ||
-    typeof originalFilename !== "string"
-  ) {
+    objectKey.length === 0 ||
+    objectKey.length > 512 ||
+    objectKey.includes("\0");
+  const invalidFilename =
+    typeof originalFilename !== "string" ||
+    originalFilename.length === 0 ||
+    originalFilename.length > 512 ||
+    originalFilename.includes("\0");
+  if (invalidKey || invalidFilename) {
     return res
       .status(400)
       .json({ error: "objectKey and originalFilename are required" });
@@ -116,8 +171,13 @@ app.post("/api/images", async (req, res) => {
 
 const SEARCH_LIMIT = 100;
 
-function imageUrl(row, publicBase) {
-  return publicBase ? `${publicBase}/${row.object_key}` : null;
+function publicUrl(publicBase, objectKey) {
+  if (!publicBase) return null;
+  const encoded = objectKey
+    .split("/")
+    .map((part) => encodeURIComponent(part))
+    .join("/");
+  return `${publicBase}/${encoded}`;
 }
 
 app.get("/api/images", async (req, res) => {
@@ -134,10 +194,31 @@ app.get("/api/images", async (req, res) => {
        FROM images WHERE ${where}
        ORDER BY created_at DESC LIMIT 200`,
     );
-    res.json(rows.map((row) => ({ ...row, url: imageUrl(row, publicBase) })));
+    res.json(
+      rows.map((row) => ({ ...row, url: publicUrl(publicBase, row.object_key) })),
+    );
   } catch (err) {
     console.error("List images failed:", err.message);
     res.status(500).json({ error: "failed to list images" });
+  }
+});
+
+app.get("/api/images/:objectKey", async (req, res) => {
+  const { objectKey } = req.params;
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, object_key, original_filename, tags, favorite, deleted, created_at
+       FROM images WHERE object_key = $1 LIMIT 1`,
+      [objectKey],
+    );
+    if (rows.length === 0) {
+      return res.status(404).json({ error: "image not found" });
+    }
+    const publicBase = (process.env.R2_PUBLIC_BASE_URL || "").replace(/\/+$/, "");
+    res.json({ ...rows[0], url: publicUrl(publicBase, rows[0].object_key) });
+  } catch (err) {
+    console.error("Get image failed:", err.message);
+    res.status(500).json({ error: "failed to get image" });
   }
 });
 
@@ -198,15 +279,15 @@ app.delete("/api/images/:objectKey", async (req, res) => {
 });
 
 function buildTsQuery(raw) {
-  const terms = (raw.toLowerCase().match(/[\p{L}\p{N}]+/gu) || []).filter(
-    (t) => t.length > 1,
-  );
+  const terms = (String(raw).toLowerCase().match(/[\p{L}\p{N}]+/gu) || [])
+    .filter((t) => t.length > 1)
+    .slice(0, 50);
   if (terms.length === 0) return null;
   return terms.join(" | ");
 }
 
 app.get("/api/search", async (req, res) => {
-  const q = (req.query.q || "").trim();
+  const q = String(req.query.q ?? "").trim();
   if (!q) {
     return res.status(400).json({ error: "q query parameter is required" });
   }
@@ -240,7 +321,7 @@ app.get("/api/search", async (req, res) => {
     res.json(
       rows.map((row) => ({
         ...row,
-        url: publicBase ? `${publicBase}/${row.object_key}` : null,
+        url: publicUrl(publicBase, row.object_key),
       })),
     );
   } catch (err) {
@@ -250,8 +331,61 @@ app.get("/api/search", async (req, res) => {
 });
 
 const DEFAULT_TAG_PROMPT = "Give me 5 descriptive keywords for this image.";
+const MAX_TAG_IMAGE_BYTES = 10 * 1024 * 1024;
 
-app.post("/api/images/tag", async (req, res) => {
+// imageUrl is attacker-controlled, so a fetch of it is an SSRF sink unless we
+// pin it to the operator-configured storage origin (https by default).
+function checkImageUrl(imageUrl) {
+  const base = (process.env.R2_PUBLIC_BASE_URL || "").replace(/\/+$/, "");
+  if (!base) {
+    return { ok: false, error: "imageUrl requires R2_PUBLIC_BASE_URL to be configured" };
+  }
+  let url;
+  let origin;
+  try {
+    url = new URL(imageUrl);
+    origin = new URL(base);
+  } catch {
+    return { ok: false, error: "invalid imageUrl" };
+  }
+  if (url.protocol !== "https:" && url.protocol !== "http:") {
+    return { ok: false, error: "imageUrl must be http(s)" };
+  }
+  if (url.origin !== origin.origin) {
+    return { ok: false, error: "imageUrl must be hosted by the configured storage origin" };
+  }
+  return { ok: true };
+}
+
+async function fetchTagImage(url) {
+  const imageRes = await fetch(url, {
+    redirect: "manual",
+    signal: AbortSignal.timeout(10000),
+  });
+  if (!imageRes.ok) throw new Error("image reference fetch failed");
+  const type = imageRes.headers.get("content-type") || "";
+  if (!/^image\//i.test(type)) {
+    throw new Error("image reference is not an image");
+  }
+  if (imageRes.body) {
+    const reader = imageRes.body.getReader();
+    const chunks = [];
+    let total = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > MAX_TAG_IMAGE_BYTES) throw new Error("image reference too large");
+      chunks.push(value);
+    }
+    return { mime: type, data: Buffer.concat(chunks).toString("base64") };
+  }
+  const buf = Buffer.from(await imageRes.arrayBuffer());
+  if (buf.byteLength > MAX_TAG_IMAGE_BYTES) throw new Error("image reference too large");
+  return { mime: type, data: buf.toString("base64") };
+}
+
+app.post("/api/images/tag", RATE_TAG, async (req, res) => {
   const { objectKey, thumbnail, mimeType, imageUrl, prompt } = req.body || {};
 
   if (!objectKey || typeof objectKey !== "string") {
@@ -267,17 +401,17 @@ app.post("/api/images/tag", async (req, res) => {
   let mime = mimeType || "image/jpeg";
 
   if (!data && imageUrl) {
-    let imageRes;
+    if (typeof imageUrl !== "string" || !checkImageUrl(imageUrl).ok) {
+      return res.status(400).json({ error: "invalid imageUrl" });
+    }
+    let fetched;
     try {
-      imageRes = await fetch(imageUrl);
+      fetched = await fetchTagImage(imageUrl);
     } catch {
-      return res.status(400).json({ error: "failed to fetch image reference" });
+      return res.status(502).json({ error: "failed to fetch image reference" });
     }
-    if (!imageRes.ok) {
-      return res.status(400).json({ error: "failed to fetch image reference" });
-    }
-    mime = imageRes.headers.get("content-type") || mime;
-    data = Buffer.from(await imageRes.arrayBuffer()).toString("base64");
+    mime = fetched.mime || mime;
+    data = fetched.data;
   }
 
   if (!data || typeof data !== "string") {
@@ -332,7 +466,7 @@ const CLIENT_DIST = fileURLToPath(
 );
 if (isProduction && existsSync(CLIENT_DIST)) {
   app.use(express.static(CLIENT_DIST));
-  app.get(/^(?!\/api\/).*/, (_req, res) => {
+  app.get(/^(?!\/api(?:\/|$)).*/, (_req, res) => {
     if (dbReady) return res.sendFile(`${CLIENT_DIST}/index.html`);
     res
       .status(503)
@@ -351,6 +485,42 @@ if (isProduction && existsSync(CLIENT_DIST)) {
 const server = app.listen(PORT, () => {
   console.log(`API listening on http://localhost:${PORT}`);
 });
+// When imported by tests, several processes can race to bind PORT; tolerate
+// EADDRINUSE instead of letting the 'error' event crash the process.
+server.on("error", (err) => {
+  if (err?.code === "EADDRINUSE") {
+    console.error(
+      `[app] Port ${PORT} already in use — module listener skipped (tests?)`,
+    );
+    return;
+  }
+  console.error("[app] Listener error:", err);
+});
+
+// JSON 404 for unmatched routes (including /api) and JSON error responses.
+app.use((req, res) => {
+  res.status(404).json({ error: "not found" });
+});
+app.use((err, req, res, next) => {
+  if (err?.type === "entity.too.large") {
+    return res.status(413).json({ error: "request body too large" });
+  }
+  if (err?.type === "entity.parse.failed") {
+    return res.status(400).json({ error: "invalid JSON body" });
+  }
+  console.error("Unhandled request error:", err);
+  res.status(500).json({ error: "internal server error" });
+});
+
+function shutdown(signal) {
+  console.log(`[app] ${signal} received, shutting down`);
+  server.close(() => {
+    pool.end().finally(() => process.exit(0));
+  });
+  setTimeout(() => process.exit(1), 5000).unref();
+}
+process.on("SIGTERM", () => shutdown("SIGTERM"));
+process.on("SIGINT", () => shutdown("SIGINT"));
 
 export { app, server };
 

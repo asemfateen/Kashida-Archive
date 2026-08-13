@@ -50,6 +50,13 @@ export async function listImages(view) {
   return res.json();
 }
 
+export async function getImage(objectKey) {
+  const res = await fetch(`/api/images/${encodeURIComponent(objectKey)}`);
+  if (!res.ok)
+    throw new Error((await res.json()).error || "failed to load image");
+  return res.json();
+}
+
 export async function updateImage(objectKey, patch) {
   const res = await fetch(`/api/images/${encodeURIComponent(objectKey)}`, {
     method: "PATCH",

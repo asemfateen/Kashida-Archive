@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { collections } from "../store.js";
+import { getImage } from "../api.js";
 import Avatar from "../components/Avatar.jsx";
 
 export default function Collections({
@@ -30,19 +31,26 @@ export default function Collections({
     showToast(`Created "${name}"`);
   };
 
-  const openCollection = (coll) => {
+  const openCollection = async (coll) => {
     if (coll.items.length === 0) return;
-    onOpenList(
-      coll.items.map((i) => ({
-        object_key: i.key,
-        url: i.url,
-        src: i.url,
-        original_filename: i.filename,
-        tags: "",
-        created_at: "",
-      })),
-      0,
-    );
+    const fallback = coll.items.map((i) => ({
+      object_key: i.key,
+      url: i.url,
+      src: i.url,
+      original_filename: i.filename,
+      tags: "",
+      created_at: "",
+    }));
+    try {
+      // Fetch full rows so favorite/tag state is correct in Detail.
+      const rows = await Promise.all(coll.items.map((i) => getImage(i.key)));
+      onOpenList(
+        rows.map((r) => ({ ...r, src: r.url || r.src })),
+        0,
+      );
+    } catch {
+      onOpenList(fallback, 0);
+    }
   };
 
   const deleteCollection = (id, e) => {

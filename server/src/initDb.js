@@ -6,10 +6,13 @@ import pool from "./db.js";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const schema = readFileSync(join(__dirname, "schema.sql"), "utf8");
 
-const RETRIES = parseInt(process.env.DB_INIT_RETRIES || "20", 10);
-const RETRY_DELAY_MS = parseInt(
-  process.env.DB_INIT_RETRY_DELAY_MS || "3000",
-  10,
+const RETRIES = Math.max(
+  1,
+  Number.parseInt(process.env.DB_INIT_RETRIES || "20", 10) || 1,
+);
+const RETRY_DELAY_MS = Math.max(
+  0,
+  Number.parseInt(process.env.DB_INIT_RETRY_DELAY_MS || "3000", 10) || 0,
 );
 
 export async function initDb({ log = true } = {}) {

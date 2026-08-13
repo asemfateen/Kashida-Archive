@@ -65,6 +65,7 @@ export default function App() {
   };
 
   const navigate = (dir) => {
+    if (selectedIndex === null) return;
     const list = detailList || images;
     if (list.length === 0) return;
     const next = (selectedIndex + dir + list.length) % list.length;

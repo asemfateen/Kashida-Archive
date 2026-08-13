@@ -133,6 +133,7 @@ export default function Dashboard({
   onCollections,
   onSettings,
   onQuickTag,
+  onFavorite,
   lastOpened,
   onRestore,
 }) {
@@ -146,6 +147,7 @@ export default function Dashboard({
   const [toast, setToast] = useState(null);
   const [, setTick] = useState(0);
   const searchRef = useRef(null);
+  const searchIdRef = useRef(0);
 
   const showToast = (msg) => {
     setToast(msg);
@@ -163,20 +165,22 @@ export default function Dashboard({
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  const runSearch = async (e) => {
+  const runSearch = async (e, forcedQuery) => {
     if (e) e.preventDefault();
-    const q = query.trim();
+    const q = (forcedQuery ?? query).trim();
     if (!q) {
       setResults(null);
       return;
     }
+    const id = ++searchIdRef.current;
     setSearching(true);
     try {
-      setResults(await searchImages(q));
+      const res = await searchImages(q);
+      if (id === searchIdRef.current) setResults(res);
     } catch {
-      setResults([]);
+      if (id === searchIdRef.current) setResults([]);
     } finally {
-      setSearching(false);
+      if (id === searchIdRef.current) setSearching(false);
     }
   };
 
@@ -241,8 +245,11 @@ export default function Dashboard({
     const a = document.createElement("a");
     a.href = url;
     a.download = `newslens-${activeFilter}-${Date.now()}.json`;
+    a.style.display = "none";
+    document.body.appendChild(a);
     a.click();
-    URL.revokeObjectURL(url);
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
     showToast(`Exported ${count} assets`);
   };
 
@@ -253,10 +260,6 @@ export default function Dashboard({
     } catch {
       showToast("Could not copy link");
     }
-  };
-
-  const persistFavorite = (image) => {
-    onFavorite(image);
   };
 
   const tagCounts = new Map();
@@ -377,15 +380,13 @@ export default function Dashboard({
                     onCollections();
                     return;
                   }
+                  searchIdRef.current += 1;
                   onFilter(item.key);
                   setResults(null);
                   setQuery("");
                 }}
                 className={
-                  activeFilter === item.key ||
-                  (item.key === "all" && activeFilter === "recent")
-                    ? NAV_ACTIVE
-                    : NAV_LINK
+                  activeFilter === item.key ? NAV_ACTIVE : NAV_LINK
                 }
               >
                 <span
@@ -537,7 +538,7 @@ export default function Dashboard({
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          persistFavorite(item);
+                          onFavorite(item);
                         }}
                         className="w-7 h-7 rounded bg-surface-container-lowest/80 backdrop-blur flex items-center justify-center border border-outline-variant text-tertiary-container hover:bg-surface-container-lowest transition-colors"
                         title={
@@ -591,7 +592,7 @@ export default function Dashboard({
                   key={tag}
                   onClick={() => {
                     setQuery(tag);
-                    runSearch();
+                    runSearch(null, tag);
                   }}
                   className="group flex items-center justify-between p-2 rounded hover:bg-surface-container-low transition-colors cursor-pointer"
                 >

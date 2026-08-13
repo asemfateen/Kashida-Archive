@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { feedback } from "../store.js";
+import { collections, savedSearches, feedback } from "../store.js";
 import Avatar from "../components/Avatar.jsx";
 
 const DEFAULT_PROMPT = "Give me 5 descriptive keywords for this image.";
@@ -126,19 +126,12 @@ export default function Settings({ onBack, imageCount }) {
               </Row>
               <Row label="Collections">
                 <span className="font-mono-data text-mono-data text-on-surface">
-                  {localStorage.getItem("newsweekly_collections")
-                    ? JSON.parse(localStorage.getItem("newsweekly_collections"))
-                        .length
-                    : 0}
+                  {collections.list().length}
                 </span>
               </Row>
               <Row label="Saved searches">
                 <span className="font-mono-data text-mono-data text-on-surface">
-                  {localStorage.getItem("newsweekly_savedsearches")
-                    ? JSON.parse(
-                        localStorage.getItem("newsweekly_savedsearches"),
-                      ).length
-                    : 0}
+                  {savedSearches.list().length}
                 </span>
               </Row>
               <Row label="AI tagging">

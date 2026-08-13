@@ -1,3 +1,4 @@
+import "./env.js";
 import { S3Client } from "@aws-sdk/client-s3";
 
 export function isR2Configured() {

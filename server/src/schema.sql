@@ -11,3 +11,13 @@ CREATE INDEX IF NOT EXISTS images_search_vector_idx ON images USING GIN (search_
 
 ALTER TABLE images ADD COLUMN IF NOT EXISTS favorite BOOLEAN NOT NULL DEFAULT false;
 ALTER TABLE images ADD COLUMN IF NOT EXISTS deleted BOOLEAN NOT NULL DEFAULT false;
+
+-- search_vector must be added via ALTER for pre-existing databases, not only in
+-- the CREATE TABLE. Adding the column then the index is idempotent on both.
+ALTER TABLE images ADD COLUMN IF NOT EXISTS search_vector tsvector
+  GENERATED ALWAYS AS (to_tsvector('simple', coalesce(tags, ''))) STORED;
+CREATE INDEX IF NOT EXISTS images_search_vector_idx ON images USING GIN (search_vector);
+
+CREATE INDEX IF NOT EXISTS images_active_created_idx ON images (created_at DESC) WHERE deleted = false;
+CREATE INDEX IF NOT EXISTS images_favorites_idx ON images (created_at DESC) WHERE deleted = false AND favorite;
+CREATE INDEX IF NOT EXISTS images_deleted_idx ON images (created_at DESC) WHERE deleted = true;

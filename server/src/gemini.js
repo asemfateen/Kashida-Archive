@@ -1,3 +1,4 @@
+import "./env.js";
 import { GoogleGenAI } from "@google/genai";
 
 export function isGeminiConfigured() {

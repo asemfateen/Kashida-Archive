@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { uploadFile } from "../api.js";
 import Avatar from "../components/Avatar.jsx";
 
@@ -15,10 +15,19 @@ export default function Upload({ onBack, onSettings }) {
   const [uploads, setUploads] = useState([]);
   const [dragging, setDragging] = useState(false);
   const inputRef = useRef(null);
+  const mounted = useRef(true);
+
+  useEffect(() => {
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
 
   const handleFiles = (fileList) => {
-    const files = Array.from(fileList).filter(
-      (f) => f.type.startsWith("image/") || /\.(heic|tiff|raw)$/i.test(f.name),
+    // Mirrors the server's extension allowlist so what we accept here can
+    // actually be uploaded.
+    const files = Array.from(fileList).filter((f) =>
+      /\.(jpg|jpeg|png|webp|gif|heic|tiff|raw)$/i.test(f.name),
     );
     for (const file of files) {
       const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -27,16 +36,26 @@ export default function Upload({ onBack, onSettings }) {
         { id, name: file.name, status: "uploading" },
       ]);
       uploadFile(file)
-        .then(() =>
+        .then(() => {
+          if (!mounted.current) return;
           setUploads((prev) =>
             prev.map((u) => (u.id === id ? { ...u, status: "done" } : u)),
-          ),
-        )
-        .catch(() =>
+          );
+        })
+        .catch((err) => {
+          if (!mounted.current) return;
           setUploads((prev) =>
-            prev.map((u) => (u.id === id ? { ...u, status: "error" } : u)),
-          ),
-        );
+            prev.map((u) =>
+              u.id === id
+                ? {
+                    ...u,
+                    status: "error",
+                    error: err?.message || "upload failed",
+                  }
+                : u,
+            ),
+          );
+        });
     }
   };
 
@@ -208,8 +227,9 @@ export default function Upload({ onBack, onSettings }) {
                     </span>
                     <span
                       className={`font-label-caps text-label-caps px-2 py-0.5 rounded-full ${STATUS_STYLES[u.status]}`}
+                      title={u.error || u.status}
                     >
-                      {u.status}
+                      {u.status === "error" ? u.error || "error" : u.status}
                     </span>
                   </div>
                 ))}

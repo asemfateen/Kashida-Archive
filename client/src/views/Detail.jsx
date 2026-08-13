@@ -60,6 +60,8 @@ export default function Detail({
   const tagRef = useRef(null);
   const navRef = useRef(null);
 
+  const src = image.url || image.src;
+
   const openCollections = () => {
     setCollectionsList(collections.list());
     setNewCollName("");
@@ -108,6 +110,9 @@ export default function Detail({
 
   useEffect(() => {
     const onKey = (e) => {
+      const typing =
+        e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA";
+      if (typing) return;
       if (e.key === "Escape") {
         setPromptModal(false);
         setCollModal(false);
@@ -116,9 +121,6 @@ export default function Detail({
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "t") {
         e.preventDefault();
         tagRef.current?.();
-        return;
-      }
-      if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") {
         return;
       }
       if (e.key === "ArrowLeft") {
@@ -190,13 +192,13 @@ export default function Detail({
     try {
       let thumbnail = null;
       try {
-        thumbnail = await makeThumbnail(image.src);
+        thumbnail = await makeThumbnail(src);
       } catch {
         thumbnail = null;
       }
       const payload = thumbnail
         ? { objectKey: image.object_key, thumbnail, prompt }
-        : { objectKey: image.object_key, imageUrl: image.src, prompt };
+        : { objectKey: image.object_key, imageUrl: src, prompt };
       const res = await tagImage(payload);
       setTags(res.tags);
       onUpdated({ ...image, tags: res.tags.join(" ") });
@@ -329,7 +331,7 @@ export default function Detail({
                   <img
                     alt="Current Asset"
                     className="max-w-full max-h-full object-contain shadow-sm border border-outline-variant rounded bg-surface-container-lowest"
-                    src={image.src}
+                    src={src}
                   />
                 </div>
               </div>
@@ -581,7 +583,7 @@ export default function Detail({
                   Date added
                 </label>
                 <span className="font-mono-data text-mono-data text-on-surface">
-                  2024-11-06T14:32:01Z
+                  {image.created_at || "—"}
                 </span>
               </div>
             </section>
