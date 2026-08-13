@@ -338,10 +338,10 @@ app.delete("/api/images/:objectKey", async (req, res) => {
 
 function buildTsQuery(raw) {
   const terms = (String(raw).toLowerCase().match(/[\p{L}\p{N}]+/gu) || [])
-    .filter((t) => t.length > 1)
+    .filter((t) => t.length > 0)
     .slice(0, 50);
   if (terms.length === 0) return null;
-  return terms.join(" | ");
+  return terms.map((t) => `${t}:*`).join(" | ");
 }
 
 app.get("/api/search", async (req, res) => {
@@ -351,10 +351,6 @@ app.get("/api/search", async (req, res) => {
   }
 
   const tsQuery = buildTsQuery(q);
-  if (!tsQuery) {
-    return res.json([]);
-  }
-
   const publicBase = (process.env.R2_PUBLIC_BASE_URL || "").replace(/\/+$/, "");
   const sort = req.query.sort || "rank";
   const orderBy =
@@ -365,16 +361,32 @@ app.get("/api/search", async (req, res) => {
         : "rank DESC, created_at DESC";
 
   try {
-    const { rows } = await pool.query(
-      `SELECT id, object_key, original_filename, tags, favorite, created_at,
-              ts_rank(search_vector, to_tsquery('simple', $1)) AS rank
-       FROM images
-       WHERE search_vector @@ to_tsquery('simple', $1)
-         AND deleted = false
-       ORDER BY ${orderBy}
-       LIMIT ${SEARCH_LIMIT}`,
-      [tsQuery],
-    );
+    let rows;
+    if (tsQuery) {
+      const result = await pool.query(
+        `SELECT id, object_key, original_filename, tags, favorite, created_at,
+                ts_rank(search_vector, to_tsquery('simple', $1)) AS rank
+         FROM images
+         WHERE (search_vector @@ to_tsquery('simple', $1) OR tags ILIKE $2)
+           AND deleted = false
+         ORDER BY ${orderBy}
+         LIMIT ${SEARCH_LIMIT}`,
+        [tsQuery, `%${q}%`],
+      );
+      rows = result.rows;
+    } else {
+      const result = await pool.query(
+        `SELECT id, object_key, original_filename, tags, favorite, created_at,
+                0 AS rank
+         FROM images
+         WHERE tags ILIKE $1
+           AND deleted = false
+         ORDER BY created_at DESC
+         LIMIT ${SEARCH_LIMIT}`,
+        [`%${q}%`],
+      );
+      rows = result.rows;
+    }
 
     res.json(
       rows.map((row) => ({
