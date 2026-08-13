@@ -5,7 +5,7 @@ import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import { PutObjectCommand } from "@aws-sdk/client-s3";
+import { PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
 import { r2, R2_BUCKET, isR2Configured } from "./r2.js";
 import pool from "./db.js";
 import { ai, GEMINI_MODEL, isGeminiConfigured } from "./gemini.js";
@@ -172,11 +172,13 @@ app.post("/api/images", async (req, res) => {
 const SEARCH_LIMIT = 100;
 
 function publicUrl(publicBase, objectKey) {
-  if (!publicBase) return null;
   const encoded = objectKey
     .split("/")
     .map((part) => encodeURIComponent(part))
     .join("/");
+  if (!publicBase || publicBase.includes("example.com")) {
+    return `/api/images/serve/${encoded}`;
+  }
   return `${publicBase}/${encoded}`;
 }
 
@@ -215,6 +217,33 @@ app.patch("/api/images/tag", (_req, res) =>
 app.delete("/api/images/tag", (_req, res) =>
   res.status(405).json({ error: "method not allowed" }),
 );
+
+app.get("/api/images/serve/*", async (req, res) => {
+  const objectKey = req.params[0];
+  if (!objectKey || objectKey.includes("\0")) {
+    return res.status(400).json({ error: "invalid objectKey" });
+  }
+  if (!isR2Configured()) {
+    return res.status(503).json({ error: "R2 is not configured" });
+  }
+  try {
+    const command = new GetObjectCommand({
+      Bucket: R2_BUCKET,
+      Key: objectKey,
+    });
+    const response = await r2.send(command);
+    if (response.ContentType) {
+      res.setHeader("Content-Type", response.ContentType);
+    }
+    if (response.ContentLength) {
+      res.setHeader("Content-Length", response.ContentLength);
+    }
+    response.Body.pipe(res);
+  } catch (err) {
+    console.error("Serve image failed:", err.message);
+    res.status(404).send("Not Found");
+  }
+});
 
 app.get("/api/images/:objectKey", async (req, res) => {
   const { objectKey } = req.params;
