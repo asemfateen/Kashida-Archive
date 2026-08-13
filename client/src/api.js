@@ -16,7 +16,7 @@ export async function uploadFile(file) {
   );
   const res = await fetch(uploadUrl, {
     method: "PUT",
-    headers: file.type ? { "Content-Type": file.type } : {},
+    headers: { "Content-Type": file.type || "application/octet-stream" },
     body: file,
   });
   if (!res.ok) throw new Error("R2 upload failed");
