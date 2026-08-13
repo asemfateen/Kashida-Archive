@@ -14,9 +14,12 @@ const RETRY_DELAY_MS = parseInt(
 
 export async function initDb({ log = true } = {}) {
   if (process.env.NODE_ENV === "production" && !process.env.DATABASE_URL) {
-    console.error("[db] DATABASE_URL is not set. In production, a Postgres database is required.");
-    console.error("[db] Set DATABASE_URL to a reachable Postgres, e.g. DATABASE_URL=postgresql://user:pass@host:5432/dbname");
-    throw new Error("DATABASE_URL environment variable is missing and required in production.");
+    if (log) {
+      console.error("[db] DATABASE_URL is not set. In production, a Postgres database is required.");
+      console.error("[db] Set DATABASE_URL to a reachable Postgres, e.g. DATABASE_URL=postgresql://user:pass@host:5432/dbname");
+      console.error("[db] Returning false — app will run in degraded mode and serve 503 responses.");
+    }
+    return false; // Don't throw — let the app handle it gracefully
   }
 
   if (log) {
@@ -47,9 +50,9 @@ export async function initDb({ log = true } = {}) {
       if (log) {
         const detail = err?.errors?.length
           ? err.errors
-              .map((e) => `${e.code || e.name || "?"}: ${e.message}`)
+              .map((e) => `${e.code || e.name || "?"}:${e.message}`)
               .join(" | ")
-          : `${err?.code || err?.name || "?"}: ${err?.message || String(err)}`;
+          : `${err?.code || err?.name || "?"}:${err?.message || String(err)}`;
         console.error(
           `[db] schema init attempt ${attempt}/${RETRIES} failed: ${detail}`,
         );
@@ -80,3 +83,4 @@ if (
 }
 
 export default initDb;
+
