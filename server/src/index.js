@@ -176,7 +176,11 @@ function publicUrl(publicBase, objectKey) {
     .split("/")
     .map((part) => encodeURIComponent(part))
     .join("/");
-  if (!publicBase || publicBase.includes("example.com")) {
+  if (
+    !publicBase ||
+    publicBase.includes("example.com") ||
+    publicBase.includes("r2.cloudflarestorage.com")
+  ) {
     return `/api/images/serve/${encoded}`;
   }
   return `${publicBase}/${encoded}`;
