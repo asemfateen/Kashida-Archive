@@ -1,6 +1,6 @@
 import { before, after, test } from "node:test";
 import assert from "node:assert/strict";
-import { app } from "../src/index.js";
+import { app, server as moduleServer } from "../src/index.js";
 import pool from "../src/db.js";
 
 const TEST_PREFIX = `test/${Date.now()}`;
@@ -32,6 +32,7 @@ before(async () => {
 
 after(async () => {
   server?.close();
+  moduleServer?.close();
   await pool.query(`DELETE FROM images WHERE object_key LIKE $1`, [
     `${TEST_PREFIX}/%`,
   ]);
