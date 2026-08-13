@@ -26,13 +26,16 @@ export default function App() {
   const [lastOpened, setLastOpened] = useState(null);
   const [pendingBatch, setPendingBatch] = useState(null);
   const [detailFrom, setDetailFrom] = useState("dashboard");
+  const [loadError, setLoadError] = useState(null);
 
   const loadImages = useCallback(async (v) => {
     setLoading(true);
+    setLoadError(null);
     try {
       setImages(await listImages(v));
-    } catch {
+    } catch (err) {
       setImages([]);
+      setLoadError(err?.message || "Failed to load images");
     } finally {
       setLoading(false);
     }
@@ -99,6 +102,14 @@ export default function App() {
     setSelectedIndex(null);
   };
 
+  const toggleFavorite = async (image) => {
+    const row = await updateImage(image.object_key, {
+      favorite: !image.favorite,
+    });
+    patchImage(row.object_key, row);
+    return row;
+  };
+
   const selected =
     selectedIndex !== null
       ? (detailList || images)[selectedIndex] || null
@@ -110,24 +121,31 @@ export default function App() {
         <Dashboard
           images={images}
           loading={loading}
+          loadError={loadError}
+          onRetry={() => loadImages(filter)}
           activeFilter={filter}
           onFilter={setFilter}
           onOpenImage={openImage}
+          onOpenList={openList}
           onUpload={() => setView("upload")}
           onSearchView={() => setView("search")}
           onCollections={() => setView("collections")}
           onSettings={() => setView("settings")}
           onQuickTag={(image, tag) => quickTag(image, tag, patchImage)}
           lastOpened={lastOpened}
-          onFavorite={(image) =>
-            updateImage(image.object_key, { favorite: !image.favorite }).then(
-              (row) => patchImage(row.object_key, row),
-            )
-          }
+          onFavorite={async (image) => {
+            const row = await toggleFavorite(image);
+            if (filter === "favorites" && !row.favorite) {
+              removeFromList(row.object_key);
+            }
+            return row;
+          }}
           onRestore={(objectKey) =>
             updateImage(objectKey, { deleted: false }).then((row) => {
               patchImage(objectKey, row);
               removeFromList(objectKey);
+            }).catch((err) => {
+              console.error("Restore failed:", err);
             })
           }
         />
@@ -150,11 +168,17 @@ export default function App() {
             removeFromList(selected.object_key);
             setView(detailFrom);
           }}
-          onFavorite={(image) =>
-            updateImage(image.object_key, { favorite: !image.favorite }).then(
-              (row) => patchImage(row.object_key, row),
-            )
-          }
+          onFavorite={async (image) => {
+            try {
+              const row = await toggleFavorite(image);
+              if (filter === "favorites" && image.favorite) {
+                removeFromList(row.object_key);
+                setView(detailFrom);
+              }
+            } catch (err) {
+              console.error("Favorite update failed:", err);
+            }
+          }}
         />
       )}
       {view === "search" && (
@@ -196,10 +220,15 @@ export { VIEWS };
 
 async function quickTag(image, tag, patchImage) {
   if (!image) return;
-  const existing = (image.tags || "").split(" ").filter(Boolean);
-  if (existing.includes(tag)) return;
-  const row = await updateImage(image.object_key, {
-    tags: [...existing, tag].join(" "),
-  });
-  patchImage(image.object_key, row);
+  try {
+    const existing = (image.tags || "").split(" ").filter(Boolean);
+    if (existing.includes(tag)) return;
+    const row = await updateImage(image.object_key, {
+      tags: [...existing, tag].join(" "),
+    });
+    patchImage(image.object_key, row);
+  } catch (err) {
+    console.error("Quick tag failed:", err);
+    throw err;
+  }
 }

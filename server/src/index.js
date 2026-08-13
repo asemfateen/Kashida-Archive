@@ -203,8 +203,24 @@ app.get("/api/images", async (req, res) => {
   }
 });
 
+// /api/images/tag is a real POST route; guard the other methods from being
+// captured by the :objectKey param route below (e.g. GET would otherwise
+// run a DB lookup for object_key = 'tag').
+app.get("/api/images/tag", (_req, res) =>
+  res.status(405).json({ error: "method not allowed" }),
+);
+app.patch("/api/images/tag", (_req, res) =>
+  res.status(405).json({ error: "method not allowed" }),
+);
+app.delete("/api/images/tag", (_req, res) =>
+  res.status(405).json({ error: "method not allowed" }),
+);
+
 app.get("/api/images/:objectKey", async (req, res) => {
   const { objectKey } = req.params;
+  if (objectKey.includes("\0")) {
+    return res.status(400).json({ error: "invalid objectKey" });
+  }
   try {
     const { rows } = await pool.query(
       `SELECT id, object_key, original_filename, tags, favorite, deleted, created_at
@@ -224,11 +240,17 @@ app.get("/api/images/:objectKey", async (req, res) => {
 
 app.patch("/api/images/:objectKey", async (req, res) => {
   const { objectKey } = req.params;
+  if (objectKey.includes("\0")) {
+    return res.status(400).json({ error: "invalid objectKey" });
+  }
   const { tags, favorite, deleted } = req.body || {};
 
   const sets = [];
   const values = [];
   if (typeof tags === "string") {
+    if (tags.length > 2000 || tags.includes("\0")) {
+      return res.status(400).json({ error: "invalid tags" });
+    }
     values.push(tags);
     sets.push(`tags = $${values.length}`);
   }
@@ -263,6 +285,9 @@ app.patch("/api/images/:objectKey", async (req, res) => {
 
 app.delete("/api/images/:objectKey", async (req, res) => {
   const { objectKey } = req.params;
+  if (objectKey.includes("\0")) {
+    return res.status(400).json({ error: "invalid objectKey" });
+  }
   try {
     const { rows } = await pool.query(
       `UPDATE images SET deleted = true WHERE object_key = $1 RETURNING id`,
@@ -388,7 +413,7 @@ async function fetchTagImage(url) {
 app.post("/api/images/tag", RATE_TAG, async (req, res) => {
   const { objectKey, thumbnail, mimeType, imageUrl, prompt } = req.body || {};
 
-  if (!objectKey || typeof objectKey !== "string") {
+  if (!objectKey || typeof objectKey !== "string" || objectKey.includes("\0")) {
     return res.status(400).json({ error: "objectKey is required" });
   }
   if (!isGeminiConfigured()) {
@@ -466,7 +491,7 @@ const CLIENT_DIST = fileURLToPath(
 );
 if (isProduction && existsSync(CLIENT_DIST)) {
   app.use(express.static(CLIENT_DIST));
-  app.get(/^(?!\/api(?:\/|$)).*/, (_req, res) => {
+  app.get(/^(?!\/api(?:\/|$)).*/i, (_req, res) => {
     if (dbReady) return res.sendFile(`${CLIENT_DIST}/index.html`);
     res
       .status(503)
@@ -507,6 +532,12 @@ app.use((err, req, res, next) => {
   }
   if (err?.type === "entity.parse.failed") {
     return res.status(400).json({ error: "invalid JSON body" });
+  }
+  // Express and body-parser tag client mistakes with a 4xx statusCode
+  // (bad %-escape in a path, unsupported charset, corrupt gzip body).
+  // Surface those as the matching JSON error instead of an internal 500.
+  if (err?.statusCode && err?.statusCode >= 400 && err?.statusCode < 500) {
+    return res.status(err.statusCode).json({ error: "invalid request" });
   }
   console.error("Unhandled request error:", err);
   res.status(500).json({ error: "internal server error" });

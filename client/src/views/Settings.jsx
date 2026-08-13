@@ -45,7 +45,20 @@ export default function Settings({ onBack, imageCount }) {
     setStatus({ check: true, ok: false, error: null });
     try {
       const res = await fetch("/api/health");
-      const data = await res.json();
+      let data = {};
+      try {
+        data = await res.json();
+      } catch {
+        /* non-JSON body (e.g. maintenance page) */
+      }
+      if (!res.ok || data.db === false) {
+        setStatus({
+          check: false,
+          ok: false,
+          error: data.db === false ? "Database not ready" : `API error ${res.status}`,
+        });
+        return;
+      }
       setStatus({ check: false, ok: true, error: null });
     } catch {
       setStatus({ check: false, ok: false, error: "API unreachable" });

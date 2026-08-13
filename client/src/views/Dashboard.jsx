@@ -125,9 +125,12 @@ function useDropFilter(label, options, value, onChange, Icon) {
 export default function Dashboard({
   images,
   loading,
+  loadError,
+  onRetry,
   activeFilter,
   onFilter,
   onOpenImage,
+  onOpenList,
   onUpload,
   onSearchView,
   onCollections,
@@ -232,9 +235,28 @@ export default function Dashboard({
       .toLowerCase()
       .replace(/[^\p{L}\p{N}_-]+/gu, " ");
     if (!tag || !lastOpened) return;
-    await onQuickTag(lastOpened, tag);
-    setQuickTag("");
-    showToast(`Tagged "${tag}" on ${lastOpened.original_filename}`);
+    try {
+      await onQuickTag(lastOpened, tag);
+      setQuickTag("");
+      showToast(`Tagged "${tag}" on ${lastOpened.original_filename}`);
+    } catch {
+      showToast("Failed to tag — try again");
+    }
+  };
+
+  const handleFavorite = async (image) => {
+    try {
+      const row = await onFavorite(image);
+      setResults((prev) =>
+        prev
+          ? prev.map((img) =>
+              img.object_key === row.object_key ? { ...img, ...row } : img,
+            )
+          : prev,
+      );
+    } catch {
+      showToast("Could not update favorite");
+    }
   };
 
   const exportJson = () => {
@@ -458,7 +480,26 @@ export default function Dashboard({
                 Loading library...
               </p>
             )}
-            {!loading && galleryItems.length === 0 && (
+            {loadError && !loading && (
+              <div className="flex flex-col items-center justify-center py-24 gap-3 text-center col-span-full">
+                <span className="material-symbols-outlined text-5xl text-error">
+                  cloud_off
+                </span>
+                <p className="font-title-sm text-title-sm text-on-surface">
+                  Couldn't load the library
+                </p>
+                <p className="font-body-sm text-body-sm text-on-surface-variant max-w-md">
+                  {loadError}
+                </p>
+                <button
+                  onClick={onRetry}
+                  className="mt-2 bg-tertiary text-on-tertiary px-4 py-2 rounded-lg font-label-caps text-label-caps hover:bg-tertiary-container transition-colors"
+                >
+                  Retry
+                </button>
+              </div>
+            )}
+            {!loading && !loadError && galleryItems.length === 0 && (
               <div className="flex flex-col items-center justify-center py-24 gap-3 text-center">
                 <span className="material-symbols-outlined text-5xl text-primary-fixed-dim">
                   photo_library
@@ -502,7 +543,16 @@ export default function Dashboard({
               return (
                 <div
                   key={item.id || item.object_key}
-                  onClick={() => onOpenImage(item)}
+                  onClick={() => {
+                    if (results !== null) {
+                      onOpenList(
+                        galleryItems.map(normalize),
+                        galleryItems.indexOf(image),
+                      );
+                    } else {
+                      onOpenImage(item);
+                    }
+                  }}
                   className="masonry-item relative group photo-card rounded bg-surface-container-lowest border border-outline-variant overflow-hidden shadow-[0px_10px_15px_rgba(0,0,0,0.05)] cursor-pointer"
                 >
                   <img
@@ -538,7 +588,7 @@ export default function Dashboard({
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          onFavorite(item);
+                          handleFavorite(item);
                         }}
                         className="w-7 h-7 rounded bg-surface-container-lowest/80 backdrop-blur flex items-center justify-center border border-outline-variant text-tertiary-container hover:bg-surface-container-lowest transition-colors"
                         title={

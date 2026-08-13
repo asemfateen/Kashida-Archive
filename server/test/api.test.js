@@ -7,6 +7,20 @@ const TEST_PREFIX = `test/${Date.now()}`;
 let server;
 let base;
 
+// The suite asserts the unconfigured-server responses (R2/Gemini 500s), so it
+// must be immune to the calling environment's real creds. Save and clear the
+// config env vars for the duration of the suite; the routes read them per
+// request, so runtime deletion is enough even if server/.env was loaded.
+const ENV_KEYS = [
+  "GEMINI_API_KEY",
+  "R2_ACCOUNT_ID",
+  "R2_ACCESS_KEY_ID",
+  "R2_SECRET_ACCESS_KEY",
+  "R2_BUCKET_NAME",
+  "R2_PUBLIC_BASE_URL",
+];
+const savedEnv = {};
+
 const key = (name) => `${TEST_PREFIX}/${name}.jpg`;
 
 const j = async (path, opts) => {
@@ -24,6 +38,10 @@ const j = async (path, opts) => {
 };
 
 before(async () => {
+  for (const k of ENV_KEYS) {
+    savedEnv[k] = process.env[k];
+    delete process.env[k];
+  }
   await pool.query(`DELETE FROM images WHERE object_key LIKE 'test/%'`);
   server = app.listen(0);
   await new Promise((r) => server.once("listening", r));
@@ -37,6 +55,10 @@ after(async () => {
     `${TEST_PREFIX}/%`,
   ]);
   await pool.end();
+  for (const k of ENV_KEYS) {
+    if (savedEnv[k] === undefined) delete process.env[k];
+    else process.env[k] = savedEnv[k];
+  }
 });
 
 test("GET /api/health returns ok", async () => {

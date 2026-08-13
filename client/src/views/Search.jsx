@@ -29,6 +29,7 @@ export default function Search({
   const [selectedKeys, setSelectedKeys] = useState(new Set());
   const [favorites, setFavorites] = useState({});
   const searchRef = useRef(null);
+  const searchIdRef = useRef(0);
 
   const showToast = (msg) => {
     setToast(msg);
@@ -49,14 +50,18 @@ export default function Search({
   const runSearch = async (q, s) => {
     const qq = (q ?? query).trim();
     const ss = s ?? sort;
-    if (!qq && terms.length === 0) return;
+    const id = ++searchIdRef.current;
+    if (!qq && terms.length === 0) {
+      setSearching(false);
+      return;
+    }
     const termList = qq
-      ? qq
+      ? (qq
           .toLowerCase()
-          .match(/[\p{L}\p{N}]+/gu)
-          .filter((t) => t.length > 1)
+          .match(/[\p{L}\p{N}]+/gu) || []).filter((t) => t.length > 1)
       : terms;
     if (termList.length === 0) {
+      setSearching(false);
       setResults([]);
       return;
     }
@@ -65,6 +70,7 @@ export default function Search({
     const t0 = performance.now();
     try {
       const found = await searchImages(termList.join(" "), ss);
+      if (id !== searchIdRef.current) return;
       setResults(found);
       setSelectedKeys(new Set());
       const favMap = {};
@@ -72,9 +78,9 @@ export default function Search({
       setFavorites(favMap);
       setElapsed(((performance.now() - t0) / 1000).toFixed(1));
     } catch {
-      setResults([]);
+      if (id === searchIdRef.current) setResults([]);
     } finally {
-      setSearching(false);
+      if (id === searchIdRef.current) setSearching(false);
     }
   };
 
@@ -82,6 +88,8 @@ export default function Search({
     const next = terms.filter((t) => t !== term);
     setTerms(next);
     if (next.length === 0) {
+      searchIdRef.current++;
+      setSearching(false);
       setResults(null);
       return;
     }
@@ -197,6 +205,8 @@ export default function Search({
   };
 
   const clearAll = () => {
+    searchIdRef.current++;
+    setSearching(false);
     setQuery("");
     setTerms([]);
     setResults(null);

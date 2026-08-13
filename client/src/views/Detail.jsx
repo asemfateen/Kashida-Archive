@@ -59,6 +59,7 @@ export default function Detail({
   const [collError, setCollError] = useState(null);
   const tagRef = useRef(null);
   const navRef = useRef(null);
+  const keyRef = useRef(image.object_key);
 
   const src = image.url || image.src;
 
@@ -103,9 +104,11 @@ export default function Detail({
   };
 
   useEffect(() => {
+    keyRef.current = image.object_key;
     setTags((image.tags || "").split(" ").filter(Boolean));
     setZoom(1);
     setTagError(null);
+    setTagging(false);
   }, [image.object_key]);
 
   useEffect(() => {
@@ -187,6 +190,7 @@ export default function Detail({
 
   const handleTag = async () => {
     if (tagging) return;
+    const requestedKey = image.object_key;
     setTagging(true);
     setTagError(null);
     try {
@@ -197,15 +201,17 @@ export default function Detail({
         thumbnail = null;
       }
       const payload = thumbnail
-        ? { objectKey: image.object_key, thumbnail, prompt }
-        : { objectKey: image.object_key, imageUrl: src, prompt };
+        ? { objectKey: requestedKey, thumbnail, prompt }
+        : { objectKey: requestedKey, imageUrl: src, prompt };
       const res = await tagImage(payload);
-      setTags(res.tags);
-      onUpdated({ ...image, tags: res.tags.join(" ") });
+      onUpdated({ object_key: requestedKey, tags: res.tags.join(" ") });
+      if (keyRef.current === requestedKey) {
+        setTags(res.tags);
+      }
     } catch (err) {
-      setTagError(err.message);
+      if (keyRef.current === requestedKey) setTagError(err.message);
     } finally {
-      setTagging(false);
+      if (keyRef.current === requestedKey) setTagging(false);
     }
   };
 

@@ -16,4 +16,14 @@ const pool = new pg.Pool({
   connectionTimeoutMillis: 10000,
 });
 
+// Make pool.end() idempotent so a double close (e.g. two test files sharing
+// the pool) never throws "Cannot use a pool after calling end".
+let poolEnded = false;
+const endPool = pool.end.bind(pool);
+pool.end = () => {
+  if (poolEnded) return Promise.resolve();
+  poolEnded = true;
+  return endPool();
+};
+
 export default pool;

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { collections } from "../store.js";
 import { getImage } from "../api.js";
 import Avatar from "../components/Avatar.jsx";
@@ -15,6 +15,13 @@ export default function Collections({
   const [list, setList] = useState(() => collections.list());
   const [draft, setDraft] = useState("");
   const [toast, setToast] = useState(null);
+  const openIdRef = useRef(0);
+
+  useEffect(() => {
+    return () => {
+      openIdRef.current++;
+    };
+  }, []);
 
   const showToast = (msg) => {
     setToast(msg);
@@ -33,6 +40,7 @@ export default function Collections({
 
   const openCollection = async (coll) => {
     if (coll.items.length === 0) return;
+    const requestedId = ++openIdRef.current;
     const fallback = coll.items.map((i) => ({
       object_key: i.key,
       url: i.url,
@@ -44,12 +52,13 @@ export default function Collections({
     try {
       // Fetch full rows so favorite/tag state is correct in Detail.
       const rows = await Promise.all(coll.items.map((i) => getImage(i.key)));
+      if (requestedId !== openIdRef.current) return;
       onOpenList(
         rows.map((r) => ({ ...r, src: r.url || r.src })),
         0,
       );
     } catch {
-      onOpenList(fallback, 0);
+      if (requestedId === openIdRef.current) onOpenList(fallback, 0);
     }
   };
 

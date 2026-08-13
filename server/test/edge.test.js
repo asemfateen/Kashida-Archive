@@ -134,6 +134,38 @@ test("GET /api/images/:objectKey returns a row or 404", async () => {
   assert.equal(missing.status, 404);
 });
 
+test("literal /api/images/tag is not shadowed by the :objectKey route", async () => {
+  assert.equal((await j("/api/images/tag")).status, 405);
+  assert.equal(
+    (await j("/api/images/tag", { method: "PATCH", body: "{}" })).status,
+    405,
+  );
+  assert.equal(
+    (await j("/api/images/tag", { method: "DELETE" })).status,
+    405,
+  );
+});
+
+test("PATCH tags rejects NUL and oversized values", async () => {
+  await j("/api/images", {
+    method: "POST",
+    body: JSON.stringify({
+      objectKey: key("tags"),
+      originalFilename: "tags.jpg",
+    }),
+  });
+  const nul = await j(`/api/images/${encodeURIComponent(key("tags"))}`, {
+    method: "PATCH",
+    body: JSON.stringify({ tags: "a\u0000b" }),
+  });
+  assert.equal(nul.status, 400);
+  const long = await j(`/api/images/${encodeURIComponent(key("tags"))}`, {
+    method: "PATCH",
+    body: JSON.stringify({ tags: "a".repeat(2001) }),
+  });
+  assert.equal(long.status, 400);
+});
+
 test("malformed JSON body -> 400 JSON, oversized body -> 413 JSON", async () => {
   const malformed = await fetch(`${base}/api/images`, {
     method: "POST",
