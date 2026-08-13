@@ -347,15 +347,10 @@ if (isProduction && existsSync(CLIENT_DIST)) {
   });
 }
 
-let server;
-if (
-  process.argv[1] &&
-  import.meta.url === new URL(process.argv[1], "file:").href
-) {
-  server = app.listen(PORT, () => {
-    console.log(`API listening on http://localhost:${PORT}`);
-  });
-}
+// Always start the server (removed the import.meta.url check that was causing it not to listen)
+const server = app.listen(PORT, () => {
+  console.log(`API listening on http://localhost:${PORT}`);
+});
 
 export { app, server };
 
