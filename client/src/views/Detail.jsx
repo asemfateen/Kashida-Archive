@@ -322,16 +322,18 @@ export default function Detail({
             <div className="relative w-full h-full">
               <div
                 className="w-full h-full overflow-auto flex items-center justify-center cursor-grab"
-                onClick={() =>
-                  setZoom((z) => Math.min(3, +(z + 0.25).toFixed(2)))
-                }
-                title="Click to zoom in"
+                onClick={(e) => {
+                  if (e.target.tagName === "IMG" || e.target === e.currentTarget) {
+                    setZoom((z) => (z === 1 ? 1.5 : 1));
+                  }
+                }}
+                title={zoom === 1 ? "Click to zoom in" : "Click to zoom out"}
               >
                 <div
-                  className="relative transition-transform duration-200"
+                  className="flex items-center justify-center transition-all duration-200"
                   style={{
-                    transform: `scale(${zoom})`,
-                    transformOrigin: "center center",
+                    width: zoom === 1 ? "100%" : `${zoom * 100}%`,
+                    height: zoom === 1 ? "100%" : `${zoom * 100}%`,
                   }}
                 >
                   <img
