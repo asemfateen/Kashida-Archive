@@ -9,4 +9,4 @@ export const ai = new GoogleGenAI({
   apiKey: process.env.GEMINI_API_KEY || "missing",
 });
 
-export const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-flash-latest";
+export const GEMINI_MODEL = "gemini-flash-latest";
