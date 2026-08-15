@@ -5,6 +5,8 @@ import {
   Route,
   Routes,
   useLocation,
+  useNavigate,
+  useSearchParams,
 } from "react-router-dom";
 import { AuthProvider, useAuth } from "./auth.jsx";
 import Taskbar from "./components/Taskbar.jsx";
@@ -28,6 +30,24 @@ const VIEWS = [
   "settings",
 ];
 
+const VIEW_PATH = {
+  dashboard: "/",
+  upload: "/upload",
+  detail: "/detail",
+  search: "/search",
+  collections: "/collections",
+  settings: "/settings",
+};
+
+function pathToView(pathname) {
+  if (pathname.startsWith("/upload")) return "upload";
+  if (pathname.startsWith("/search")) return "search";
+  if (pathname.startsWith("/detail")) return "detail";
+  if (pathname.startsWith("/collections")) return "collections";
+  if (pathname.startsWith("/settings")) return "settings";
+  return "dashboard";
+}
+
 function Guard({ children }) {
   const { isAuthed } = useAuth();
   const location = useLocation();
@@ -37,8 +57,9 @@ function Guard({ children }) {
 }
 
 function Shell() {
+  const navigate = useNavigate();
   const location = useLocation();
-  const [view, setView] = useState("dashboard");
+  const [searchParams] = useSearchParams();
   const [filter, setFilter] = useState("all");
   const [images, setImages] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -46,9 +67,13 @@ function Shell() {
   const [selectedIndex, setSelectedIndex] = useState(null);
   const [lastOpened, setLastOpened] = useState(null);
   const [pendingBatch, setPendingBatch] = useState(null);
-  const [detailFrom, setDetailFrom] = useState("dashboard");
+  const [detailFrom, setDetailFrom] = useState("/");
   const [loadError, setLoadError] = useState(null);
-  const [searchQuery, setSearchQuery] = useState(null);
+
+  const view = pathToView(location.pathname);
+
+  const go = (path) => navigate(path);
+  const goBack = () => navigate(-1);
 
   const loadImages = useCallback(async (v) => {
     setLoading(true);
@@ -67,6 +92,10 @@ function Shell() {
     loadImages(filter);
   }, [filter, loadImages]);
 
+  const openSearch = (q) => {
+    navigate(`/search?q=${encodeURIComponent(q)}`);
+  };
+
   const openImage = (image) => {
     const index = images.findIndex((i) => i.object_key === image.object_key);
     if (index !== -1) {
@@ -77,19 +106,19 @@ function Shell() {
       setSelectedIndex(0);
     }
     setLastOpened(image);
-    setDetailFrom(view);
-    setView("detail");
+    setDetailFrom(location.pathname);
+    go(VIEW_PATH.detail);
   };
 
   const openList = (list, index) => {
     setDetailList(list);
     setSelectedIndex(index);
     setLastOpened(list[index]);
-    setDetailFrom(view);
-    setView("detail");
+    setDetailFrom(location.pathname);
+    go(VIEW_PATH.detail);
   };
 
-  const navigate = (dir) => {
+  const stepImage = (dir) => {
     if (selectedIndex === null) return;
     const list = detailList || images;
     if (list.length === 0) return;
@@ -137,23 +166,14 @@ function Shell() {
       ? (detailList || images)[selectedIndex] || null
       : null;
 
-  const openSearch = (q) => {
-    setSearchQuery(q);
-    setView("search");
-  };
-
-  // Home link lands on the dashboard: reset the view whenever the shell route
-  // changes (e.g. returning from /profile via the Home link).
-  useEffect(() => {
-    setView("dashboard");
-  }, [location.pathname]);
+  const searchQuery = searchParams.get("q");
 
   return (
     <div className="h-screen w-screen flex flex-col overflow-hidden bg-background text-on-surface font-body-md text-body-md">
       <Taskbar
         onSearch={openSearch}
-        onSettings={() => setView("settings")}
-        onUpload={() => setView("upload")}
+        onSettings={() => go(VIEW_PATH.settings)}
+        onUpload={() => go(VIEW_PATH.upload)}
       />
       <div className="flex-1 flex flex-col overflow-hidden">
         {view === "dashboard" && (
@@ -166,8 +186,8 @@ function Shell() {
             onFilter={setFilter}
             onOpenImage={openImage}
             onOpenList={openList}
-            onUpload={() => setView("upload")}
-            onSettings={() => setView("settings")}
+            onUpload={() => go(VIEW_PATH.upload)}
+            onSettings={() => go(VIEW_PATH.settings)}
             onQuickTag={(image, tag) => quickTag(image, tag, patchImage)}
             lastOpened={lastOpened}
             onFavorite={async (image) => {
@@ -191,8 +211,8 @@ function Shell() {
         )}
         {view === "upload" && (
           <Upload
-            onBack={() => setView("dashboard")}
-            onSettings={() => setView("settings")}
+            onBack={() => goBack()}
+            onSettings={() => go(VIEW_PATH.settings)}
           />
         )}
         {view === "detail" && selected && (
@@ -200,19 +220,19 @@ function Shell() {
             image={selected}
             index={selectedIndex}
             total={(detailList || images).length}
-            onBack={() => setView(detailFrom)}
-            onNavigate={navigate}
+            onBack={() => go(detailFrom)}
+            onNavigate={stepImage}
             onUpdated={(row) => patchImage(row.object_key, row)}
             onDeleted={() => {
               removeFromList(selected.object_key);
-              setView(detailFrom);
+              go(detailFrom);
             }}
             onFavorite={async (image) => {
               try {
                 const row = await toggleFavorite(image);
                 if (filter === "favorites" && image.favorite) {
                   removeFromList(row.object_key);
-                  setView(detailFrom);
+                  go(detailFrom);
                 }
               } catch (err) {
                 console.error("Favorite update failed:", err);
@@ -223,33 +243,29 @@ function Shell() {
         {view === "search" && (
           <Search
             query={searchQuery}
-            onSearchHandled={() => setSearchQuery(null)}
             onOpenImage={openImage}
             onOpenList={openList}
-            onUpload={() => setView("upload")}
-            onBack={() => setView("dashboard")}
-            onSettings={() => setView("settings")}
+            onUpload={() => go(VIEW_PATH.upload)}
+            onBack={() => goBack()}
+            onSettings={() => go(VIEW_PATH.settings)}
             onBatch={(selected) => {
               setPendingBatch(selected);
-              setView("collections");
+              go(VIEW_PATH.collections);
             }}
           />
         )}
         {view === "collections" && (
           <Collections
-            onBack={() => setView("dashboard")}
+            onBack={() => goBack()}
             onOpenList={openList}
-            onUpload={() => setView("upload")}
-            onSettings={() => setView("settings")}
+            onUpload={() => go(VIEW_PATH.upload)}
+            onSettings={() => go(VIEW_PATH.settings)}
             pendingBatch={pendingBatch}
             onConsumedBatch={() => setPendingBatch(null)}
           />
         )}
         {view === "settings" && (
-          <Settings
-            imageCount={images.length}
-            onBack={() => setView("dashboard")}
-          />
+          <Settings imageCount={images.length} onBack={() => goBack()} />
         )}
       </div>
     </div>
@@ -266,10 +282,7 @@ export default function App() {
             path="/profile"
             element={
               <Guard>
-                <div className="h-screen w-screen flex flex-col overflow-hidden bg-background text-on-surface font-body-md text-body-md">
-                  <Taskbar onSearch={() => {}} />
-                  <Profile />
-                </div>
+                <ProfileShell />
               </Guard>
             }
           />
@@ -277,13 +290,27 @@ export default function App() {
             path="/*"
             element={
               <Guard>
-                <Shell key="shell" />
+                <Shell />
               </Guard>
             }
           />
         </Routes>
       </AuthProvider>
     </BrowserRouter>
+  );
+}
+
+function ProfileShell() {
+  const navigate = useNavigate();
+  return (
+    <div className="h-screen w-screen flex flex-col overflow-hidden bg-background text-on-surface font-body-md text-body-md">
+      <Taskbar
+        onSearch={(q) => navigate(`/search?q=${encodeURIComponent(q)}`)}
+        onSettings={() => navigate("/settings")}
+        onUpload={() => navigate("/upload")}
+      />
+      <Profile />
+    </div>
   );
 }
 

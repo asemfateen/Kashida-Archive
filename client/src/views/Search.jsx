@@ -4,7 +4,6 @@ import { savedSearches } from "../store.js";
 
 export default function Search({
   query,
-  onSearchHandled,
   onOpenImage,
   onOpenList,
   onUpload,
@@ -25,21 +24,23 @@ export default function Search({
   const [selectedKeys, setSelectedKeys] = useState(new Set());
   const [favorites, setFavorites] = useState({});
   const searchIdRef = useRef(0);
-  const pendingQueryRef = useRef(null);
+  const lastQueryRef = useRef(null);
 
   const showToast = (msg) => {
     setToast(msg);
     setTimeout(() => setToast(null), 2000);
   };
 
-  // New searches land here from the global taskbar. The one-shot gate keeps a
-  // pending search from re-firing on every render while results are streaming.
+  // The query comes from the URL (/search?q=...). Re-run whenever it changes,
+  // which covers typing a fresh search AND browser back/forward navigation.
   useEffect(() => {
-    if (typeof query === "string" && query.trim()) {
-      pendingQueryRef.current = query;
-      if (onSearchHandled) onSearchHandled();
+    const q = typeof query === "string" ? query.trim() : "";
+    if (q && q !== lastQueryRef.current) {
+      lastQueryRef.current = q;
+      runSearch(q, sort);
     }
-  }, [query, onSearchHandled]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query]);
 
   const runSearch = async (q, s) => {
     const qq = (q ?? currentQuery).trim();
@@ -76,17 +77,6 @@ export default function Search({
       if (id === searchIdRef.current) setSearching(false);
     }
   };
-
-  // Consume a query that arrived from the taskbar after we mounted.
-  useEffect(() => {
-    const pending = pendingQueryRef.current;
-    if (pending) {
-      pendingQueryRef.current = null;
-      setCurrentQuery(pending);
-      runSearch(pending, sort);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   const removeTerm = (term) => {
     const next = terms.filter((t) => t !== term);
