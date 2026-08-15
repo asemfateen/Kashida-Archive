@@ -232,7 +232,9 @@ function Shell() {
                 }
               />
             )}
-            {view === "upload" && <Upload />}
+            {view === "upload" && (
+              <Upload onUploaded={() => loadImages("all")} />
+            )}
             {view === "detail" && selected && (
               <Detail
                 image={selected}

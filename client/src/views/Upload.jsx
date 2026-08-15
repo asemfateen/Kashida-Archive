@@ -7,7 +7,7 @@ const STATUS_STYLES = {
   error: "bg-error-container text-on-error-container",
 };
 
-export default function Upload() {
+export default function Upload({ onUploaded }) {
   const [uploads, setUploads] = useState([]);
   const [dragging, setDragging] = useState(false);
   const inputRef = useRef(null);
@@ -38,6 +38,7 @@ export default function Upload() {
           setUploads((prev) =>
             prev.map((u) => (u.id === id ? { ...u, status: "done" } : u)),
           );
+          onUploaded?.();
         })
         .catch((err) => {
           if (!mounted.current) return;

@@ -47,7 +47,7 @@ export default function SidePanel({ activeKey, onNavigate, onSettings }) {
           onClick={onSettings}
           className="flex items-center gap-gutter text-on-surface-variant px-4 py-3 hover:bg-surface-container-highest transition-all font-label-caps text-label-caps"
         >
-          <span className="material-symbols-outlined">help</span>
+          <span className="material-symbols-outlined">settings</span>
           Settings
         </button>
       </div>
