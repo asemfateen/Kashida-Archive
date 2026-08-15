@@ -189,7 +189,12 @@ function Shell() {
             }
           />
         )}
-        {view === "upload" && <Upload onBack={() => setView("dashboard")} />}
+        {view === "upload" && (
+          <Upload
+            onBack={() => setView("dashboard")}
+            onSettings={() => setView("settings")}
+          />
+        )}
         {view === "detail" && selected && (
           <Detail
             image={selected}

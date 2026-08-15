@@ -10,7 +10,7 @@ const STATUS_STYLES = {
   error: "bg-error-container text-on-error-container",
 };
 
-export default function Upload({ onBack }) {
+export default function Upload({ onBack, onSettings }) {
   const [uploads, setUploads] = useState([]);
   const [dragging, setDragging] = useState(false);
   const inputRef = useRef(null);
@@ -115,7 +115,14 @@ export default function Upload({ onBack }) {
             </li>
           </ul>
           <div className="mt-auto pt-4 border-t border-outline-variant flex flex-col gap-1 font-label-caps text-label-caps">
-            <a className={NAV_LINK} href="/">
+            <a
+              className={NAV_LINK}
+              href="/settings"
+              onClick={(e) => {
+                e.preventDefault();
+                onSettings();
+              }}
+            >
               <span className="material-symbols-outlined">settings</span>
               Settings
             </a>
