@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import Avatar from "./Avatar.jsx";
 
-export default function Taskbar({ onSearch }) {
+export default function Taskbar({ onSearch, onSettings }) {
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
   const searchRef = useRef(null);
@@ -59,14 +59,14 @@ export default function Taskbar({ onSearch }) {
           </form>
         </div>
         <div className="flex items-center gap-4 w-[320px] justify-end">
-          <Link
-            to="/"
+          <button
+            onClick={onSettings}
             className="flex items-center gap-2 text-on-surface-variant hover:text-primary transition-colors font-label-caps text-label-caps"
-            title="Home"
+            title="Settings"
           >
-            <span className="material-symbols-outlined">home</span>
-            Home
-          </Link>
+            <span className="material-symbols-outlined">settings</span>
+            Settings
+          </button>
           <button
             onClick={() => navigate("/profile")}
             className="hover:opacity-85 transition-opacity rounded-full"

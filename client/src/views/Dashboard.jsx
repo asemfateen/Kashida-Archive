@@ -215,7 +215,7 @@ export default function Dashboard({
               className="flex items-center gap-gutter text-on-surface-variant px-4 py-3 hover:bg-surface-container-highest transition-all font-label-caps text-label-caps"
             >
               <span className="material-symbols-outlined">help</span>
-              Help &amp; Settings
+              Settings
             </button>
             <button
               onClick={onSettings}

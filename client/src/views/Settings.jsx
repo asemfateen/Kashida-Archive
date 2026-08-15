@@ -104,7 +104,7 @@ export default function Settings({ onBack, imageCount }) {
               <span className="font-label-caps text-label-caps">Library</span>
             </button>
             <h1 className="font-headline-md text-headline-md text-primary tracking-tight font-bold">
-              Settings &amp; Help
+              Settings
             </h1>
           </div>
           {/* System Status */}

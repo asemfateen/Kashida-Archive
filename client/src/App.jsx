@@ -150,7 +150,7 @@ function Shell() {
 
   return (
     <div className="h-screen w-screen flex flex-col overflow-hidden bg-background text-on-surface font-body-md text-body-md">
-      <Taskbar onSearch={openSearch} />
+      <Taskbar onSearch={openSearch} onSettings={() => setView("settings")} />
       <div className="flex-1 flex flex-col overflow-hidden">
         {view === "dashboard" && (
           <Dashboard
@@ -236,7 +236,12 @@ function Shell() {
             onConsumedBatch={() => setPendingBatch(null)}
           />
         )}
-        {view === "settings" && <Settings imageCount={images.length} />}
+        {view === "settings" && (
+          <Settings
+            imageCount={images.length}
+            onBack={() => setView("dashboard")}
+          />
+        )}
       </div>
     </div>
   );
