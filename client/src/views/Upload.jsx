@@ -1,8 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { uploadFile } from "../api.js";
-
-const NAV_LINK =
-  "flex items-center gap-gutter text-on-surface-variant px-4 py-3 hover:bg-surface-container-highest transition-all rounded-xl font-label-caps text-label-caps translate-x-1 hover:translate-x-0";
+import SidePanel from "../components/SidePanel.jsx";
 
 const STATUS_STYLES = {
   uploading: "bg-surface-container-high text-on-surface-variant",
@@ -63,74 +61,16 @@ export default function Upload({ onBack, onSettings }) {
     <>
       <div className="flex flex-1 overflow-hidden">
         {/* SideNavBar */}
-        <nav className="hidden lg:flex fixed left-0 top-16 h-[calc(100vh-64px)] w-panel-width-fixed flex-col p-4 z-40 bg-surface-container-low border-r border-outline-variant">
-          <div className="mb-6 px-4">
-            <h2 className="font-headline-md text-headline-md text-primary">
-              Library
-            </h2>
-            <p className="font-body-sm text-body-sm text-on-surface-variant mt-1">
-              Visual Assets
-            </p>
-          </div>
-          <ul className="flex flex-col gap-2 mb-8">
-            <li>
-              <a
-                className={NAV_LINK}
-                href="/"
-                onClick={(e) => {
-                  e.preventDefault();
-                  onBack();
-                }}
-              >
-                <span className="material-symbols-outlined">photo_library</span>
-                All Photos
-              </a>
-            </li>
-            <li>
-              <a
-                className="flex items-center gap-gutter bg-surface-container-high text-primary rounded-xl px-4 py-3 transition-all font-label-caps text-label-caps"
-                href="/upload"
-              >
-                <span
-                  className="material-symbols-outlined"
-                  style={{ fontVariationSettings: "'FILL' 1" }}
-                >
-                  cloud_upload
-                </span>
-                Uploads
-              </a>
-            </li>
-            <li>
-              <a
-                className={NAV_LINK}
-                href="/"
-                onClick={(e) => {
-                  e.preventDefault();
-                  onBack();
-                }}
-              >
-                <span className="material-symbols-outlined">schedule</span>
-                Recent
-              </a>
-            </li>
-          </ul>
-          <div className="mt-auto pt-4 border-t border-outline-variant flex flex-col gap-1 font-label-caps text-label-caps">
-            <a
-              className={NAV_LINK}
-              href="/settings"
-              onClick={(e) => {
-                e.preventDefault();
-                onSettings();
-              }}
-            >
-              <span className="material-symbols-outlined">settings</span>
-              Settings
-            </a>
-          </div>
-        </nav>
+        <SidePanel
+          activeKey="upload"
+          onNavigate={(key) => {
+            if (key !== "upload") onBack();
+          }}
+          onSettings={onSettings}
+        />
 
         {/* Main Content Area */}
-        <main className="flex-1 lg:ml-panel-width-fixed overflow-y-auto p-margin-page bg-background">
+        <main className="flex-1 overflow-y-auto p-margin-page bg-background">
           <div className="max-w-5xl mx-auto flex flex-col gap-8">
             <div className="flex justify-between items-end">
               <div>
