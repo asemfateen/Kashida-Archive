@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import Avatar from "./Avatar.jsx";
 
-export default function Taskbar({ onSearch, onSettings }) {
+export default function Taskbar({ onSearch, onSettings, onUpload }) {
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
   const searchRef = useRef(null);
@@ -59,6 +59,14 @@ export default function Taskbar({ onSearch, onSettings }) {
           </form>
         </div>
         <div className="flex items-center gap-4 w-[320px] justify-end">
+          <button
+            onClick={onUpload}
+            className="flex items-center gap-2 text-on-surface-variant hover:text-primary transition-colors font-label-caps text-label-caps"
+            title="Upload"
+          >
+            <span className="material-symbols-outlined">upload</span>
+            Upload
+          </button>
           <button
             onClick={onSettings}
             className="flex items-center gap-2 text-on-surface-variant hover:text-primary transition-colors font-label-caps text-label-caps"

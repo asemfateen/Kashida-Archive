@@ -150,7 +150,11 @@ function Shell() {
 
   return (
     <div className="h-screen w-screen flex flex-col overflow-hidden bg-background text-on-surface font-body-md text-body-md">
-      <Taskbar onSearch={openSearch} onSettings={() => setView("settings")} />
+      <Taskbar
+        onSearch={openSearch}
+        onSettings={() => setView("settings")}
+        onUpload={() => setView("upload")}
+      />
       <div className="flex-1 flex flex-col overflow-hidden">
         {view === "dashboard" && (
           <Dashboard
