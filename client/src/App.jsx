@@ -19,7 +19,7 @@ import Detail from "./views/Detail.jsx";
 import Search from "./views/Search.jsx";
 import Collections from "./views/Collections.jsx";
 import Settings from "./views/Settings.jsx";
-import { getImage, listImages, updateImage } from "./api.js";
+import { getFolders, getImage, listImages, updateImage } from "./api.js";
 import { mergeTags } from "./tags.js";
 
 const VIEWS = [
@@ -72,6 +72,8 @@ function Shell() {
   const location = useLocation();
   const [searchParams] = useSearchParams();
   const [filter, setFilter] = useState("all");
+  const [folder, setFolder] = useState("");
+  const [folders, setFolders] = useState([]);
   const [images, setImages] = useState([]);
   const [loading, setLoading] = useState(true);
   const [detailList, setDetailList] = useState(null);
@@ -86,11 +88,11 @@ function Shell() {
   const go = (path) => navigate(path);
   const goBack = () => navigate(-1);
 
-  const loadImages = useCallback(async (v) => {
+  const loadImages = useCallback(async (v, f) => {
     setLoading(true);
     setLoadError(null);
     try {
-      setImages(await listImages(v));
+      setImages(await listImages(v, f));
     } catch (err) {
       setImages([]);
       setLoadError(err?.message || "Failed to load images");
@@ -100,8 +102,20 @@ function Shell() {
   }, []);
 
   useEffect(() => {
-    loadImages(filter);
-  }, [filter, loadImages]);
+    loadImages(filter, folder);
+  }, [filter, folder, loadImages]);
+
+  const refreshFolders = useCallback(async () => {
+    try {
+      setFolders(await getFolders());
+    } catch {
+      // Folder list is cosmetic; a failed fetch just leaves the last view.
+    }
+  }, []);
+
+  useEffect(() => {
+    refreshFolders();
+  }, [images, refreshFolders]);
 
   const openSearch = (q) => {
     navigate(`/?q=${encodeURIComponent(q)}`);
@@ -228,7 +242,14 @@ function Shell() {
       go(VIEW_PATH.upload);
       return;
     }
+    setFolder("");
     setFilter(key);
+    if (view !== "dashboard") go(VIEW_PATH.dashboard);
+  };
+
+  const handleFolder = (name) => {
+    setFilter("all");
+    setFolder(name);
     if (view !== "dashboard") go(VIEW_PATH.dashboard);
   };
 
@@ -246,10 +267,12 @@ function Shell() {
               view === "upload"
                 ? "upload"
                 : view === "dashboard"
-                  ? filter
+                  ? folder || filter
                   : null
             }
             onNavigate={handleNav}
+            onFolder={handleFolder}
+            folders={folders}
             onSettings={() => go(VIEW_PATH.settings)}
           />
           <div className="flex-1 flex flex-col overflow-hidden">
@@ -258,8 +281,9 @@ function Shell() {
                 images={images}
                 loading={loading}
                 loadError={loadError}
-                onRetry={() => loadImages(filter)}
+                onRetry={() => loadImages(filter, folder)}
                 activeFilter={filter}
+                activeFolder={folder}
                 searchQuery={searchQuery}
                 onFilter={setFilter}
                 onOpenImage={openImage}

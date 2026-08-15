@@ -19,6 +19,7 @@ export default function Dashboard({
   onFavorite,
   lastOpened,
   onRestore,
+  activeFolder = "",
 }) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState(null);
@@ -133,7 +134,7 @@ export default function Dashboard({
     setResults(null);
     setQuery("");
     setSearching(false);
-  }, [activeFilter]);
+  }, [activeFilter, activeFolder]);
 
   // Run the search coming from the taskbar (/?q=...) inside the home grid.
   useEffect(() => {
@@ -220,13 +221,15 @@ export default function Dashboard({
                 <p className="font-title-sm text-title-sm text-primary">
                   {results !== null
                     ? "No matches found"
-                    : activeFilter === "trash"
-                      ? "Trash is empty"
-                      : activeFilter === "favorites"
-                        ? "No favorites yet — star an image"
-                        : images.length === 0
-                          ? "No images yet"
-                          : "No assets match the active filters"}
+                    : activeFolder
+                      ? "This folder is empty"
+                      : activeFilter === "trash"
+                        ? "Trash is empty"
+                        : activeFilter === "favorites"
+                          ? "No favorites yet — star an image"
+                          : images.length === 0
+                            ? "No images yet"
+                            : "No assets match the active filters"}
                 </p>
                 <button
                   onClick={() => {

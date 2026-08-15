@@ -12,7 +12,13 @@ const NAV_ITEMS = [
   { key: "upload", icon: "cloud_upload", label: "Uploads", fill: false },
 ];
 
-export default function SidePanel({ activeKey, onNavigate, onSettings }) {
+export default function SidePanel({
+  activeKey,
+  onNavigate,
+  onFolder,
+  onSettings,
+  folders = [],
+}) {
   return (
     <aside className="bg-surface-container-low border-r border-outline-variant w-panel-width-fixed flex flex-col p-4">
       <div className="mb-6 px-4">
@@ -23,7 +29,7 @@ export default function SidePanel({ activeKey, onNavigate, onSettings }) {
           Visual Assets
         </p>
       </div>
-      <nav className="flex-1 flex flex-col gap-1 font-label-caps text-label-caps">
+      <nav className="flex-1 flex flex-col gap-1 font-label-caps text-label-caps overflow-y-auto">
         {NAV_ITEMS.map((item) => (
           <button
             key={item.key}
@@ -41,6 +47,32 @@ export default function SidePanel({ activeKey, onNavigate, onSettings }) {
             {item.label}
           </button>
         ))}
+        {folders.length > 0 && (
+          <div className="mt-4">
+            <p className="font-label-caps text-label-caps text-on-surface-variant px-4 mb-1">
+              Folders
+            </p>
+            {folders.map((f) => (
+              <button
+                key={f.folder}
+                onClick={() => onFolder(f.folder)}
+                className={
+                  activeKey === f.folder
+                    ? "flex items-center justify-between gap-gutter bg-surface-container-high text-primary rounded-xl px-4 py-3 transition-all translate-x-1 font-label-caps text-label-caps"
+                    : "flex items-center justify-between gap-gutter text-on-surface-variant px-4 py-3 hover:bg-surface-container-highest transition-all rounded-xl font-label-caps text-label-caps translate-x-1 hover:translate-x-0"
+                }
+              >
+                <span className="flex items-center gap-gutter min-w-0">
+                  <span className="material-symbols-outlined">folder</span>
+                  <span className="truncate">{f.folder}</span>
+                </span>
+                <span className="font-mono-data text-mono-data opacity-70">
+                  {f.count}
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
       </nav>
       <div className="mt-auto pt-4 border-t border-outline-variant flex flex-col gap-1 font-label-caps text-label-caps">
         <button
