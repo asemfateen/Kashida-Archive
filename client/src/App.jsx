@@ -19,7 +19,7 @@ import Detail from "./views/Detail.jsx";
 import Search from "./views/Search.jsx";
 import Collections from "./views/Collections.jsx";
 import Settings from "./views/Settings.jsx";
-import { listImages, updateImage } from "./api.js";
+import { getImage, listImages, updateImage } from "./api.js";
 import { mergeTags } from "./tags.js";
 
 const VIEWS = [
@@ -47,6 +47,16 @@ function pathToView(pathname) {
   if (pathname.startsWith("/collections")) return "collections";
   if (pathname.startsWith("/settings")) return "settings";
   return "dashboard";
+}
+
+function detailKeyFromPath(pathname) {
+  if (!pathname.startsWith("/detail/")) return null;
+  const rest = pathname.slice("/detail/".length);
+  try {
+    return decodeURIComponent(rest);
+  } catch {
+    return null;
+  }
 }
 
 function Guard({ children }) {
@@ -108,7 +118,7 @@ function Shell() {
     }
     setLastOpened(image);
     setDetailFrom(location.pathname);
-    go(VIEW_PATH.detail);
+    go(`/detail/${encodeURIComponent(image.object_key)}`);
   };
 
   const openList = (list, index) => {
@@ -116,7 +126,7 @@ function Shell() {
     setSelectedIndex(index);
     setLastOpened(list[index]);
     setDetailFrom(location.pathname);
-    go(VIEW_PATH.detail);
+    go(`/detail/${encodeURIComponent(list[index].object_key)}`);
   };
 
   const stepImage = (dir) => {
@@ -126,6 +136,11 @@ function Shell() {
     const next = (selectedIndex + dir + list.length) % list.length;
     setSelectedIndex(next);
     setLastOpened(list[next]);
+    if (list[next]?.object_key) {
+      navigate(`/detail/${encodeURIComponent(list[next].object_key)}`, {
+        replace: true,
+      });
+    }
   };
 
   const patchImage = (objectKey, patch) => {
@@ -166,6 +181,45 @@ function Shell() {
     selectedIndex !== null
       ? (detailList || images)[selectedIndex] || null
       : null;
+
+  const urlKey =
+    view === "detail" ? detailKeyFromPath(location.pathname) : null;
+
+  useEffect(() => {
+    if (!urlKey) return;
+    if (selectedIndex !== null) {
+      const list = detailList || images;
+      const current = list[selectedIndex];
+      if (current && current.object_key === urlKey) return;
+    }
+    const foundIndex = images.findIndex((i) => i.object_key === urlKey);
+    if (foundIndex !== -1) {
+      setDetailList(null);
+      setSelectedIndex(foundIndex);
+      setLastOpened(images[foundIndex]);
+      return;
+    }
+    let cancelled = false;
+    setLoading(true);
+    getImage(urlKey)
+      .then((img) => {
+        if (cancelled || !img) return;
+        setDetailList([img]);
+        setSelectedIndex(0);
+        setLastOpened(img);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        console.error("Failed to load image from URL:", err);
+        go(detailFrom);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [urlKey, selectedIndex, images, detailList, detailFrom]);
 
   const searchQuery = searchParams.get("q");
 
