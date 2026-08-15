@@ -163,7 +163,7 @@ export default function Dashboard({
       <div className="flex flex-1 overflow-hidden">
         {/* SideNavBar */}
         <SidePanel
-          activeKey={filter}
+          activeKey={activeFilter}
           onNavigate={(key) => {
             if (key === "upload") {
               onUpload();
