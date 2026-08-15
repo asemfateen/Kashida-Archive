@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import { uploadFile } from "../api.js";
-import SidePanel from "../components/SidePanel.jsx";
 
 const STATUS_STYLES = {
   uploading: "bg-surface-container-high text-on-surface-variant",
@@ -8,7 +7,7 @@ const STATUS_STYLES = {
   error: "bg-error-container text-on-error-container",
 };
 
-export default function Upload({ onBack, onSettings }) {
+export default function Upload() {
   const [uploads, setUploads] = useState([]);
   const [dragging, setDragging] = useState(false);
   const inputRef = useRef(null);
@@ -60,15 +59,6 @@ export default function Upload({ onBack, onSettings }) {
   return (
     <>
       <div className="flex flex-1 overflow-hidden">
-        {/* SideNavBar */}
-        <SidePanel
-          activeKey="upload"
-          onNavigate={(key) => {
-            if (key !== "upload") onBack();
-          }}
-          onSettings={onSettings}
-        />
-
         {/* Main Content Area */}
         <main className="flex-1 overflow-y-auto p-margin-page bg-background">
           <div className="max-w-5xl mx-auto flex flex-col gap-8">

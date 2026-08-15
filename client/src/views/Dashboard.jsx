@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import { searchImages } from "../api.js";
-import SidePanel from "../components/SidePanel.jsx";
 
 const DIMENSIONS = new Map();
 let measureQueued = {};
@@ -15,8 +14,8 @@ export default function Dashboard({
   onOpenImage,
   onOpenList,
   onUpload,
-  onSettings,
   onQuickTag,
+  searchQuery = null,
   onFavorite,
   lastOpened,
   onRestore,
@@ -127,6 +126,30 @@ export default function Dashboard({
     }
   };
 
+  // Changing library filter (via the shared side panel) clears any in-page
+  // quick search so the grid reflects the selected view.
+  useEffect(() => {
+    searchIdRef.current += 1;
+    setResults(null);
+    setQuery("");
+    setSearching(false);
+  }, [activeFilter]);
+
+  // Run the search coming from the taskbar (/?q=...) inside the home grid.
+  useEffect(() => {
+    const q = typeof searchQuery === "string" ? searchQuery.trim() : "";
+    if (q) {
+      setQuery(q);
+      runSearch(null, q);
+    } else {
+      setResults(null);
+      setQuery("");
+      searchIdRef.current += 1;
+      setSearching(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchQuery]);
+
   const tagCounts = new Map();
   for (const img of images) {
     for (const tag of (img.tags || "").split(" ").filter(Boolean)) {
@@ -161,22 +184,6 @@ export default function Dashboard({
   return (
     <>
       <div className="flex flex-1 overflow-hidden">
-        {/* SideNavBar */}
-        <SidePanel
-          activeKey={activeFilter}
-          onNavigate={(key) => {
-            if (key === "upload") {
-              onUpload();
-              return;
-            }
-            searchIdRef.current += 1;
-            onFilter(key);
-            setResults(null);
-            setQuery("");
-          }}
-          onSettings={onSettings}
-        />
-
         {/* Main Content Canvas */}
         <main className="flex-1 bg-background overflow-y-auto flex flex-col relative">
           {/* Asset Grid */}

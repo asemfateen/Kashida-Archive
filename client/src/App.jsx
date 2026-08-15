@@ -10,6 +10,7 @@ import {
 } from "react-router-dom";
 import { AuthProvider, useAuth } from "./auth.jsx";
 import Taskbar from "./components/Taskbar.jsx";
+import SidePanel from "./components/SidePanel.jsx";
 import Login from "./views/Login.jsx";
 import Profile from "./views/Profile.jsx";
 import Dashboard from "./views/Dashboard.jsx";
@@ -93,7 +94,7 @@ function Shell() {
   }, [filter, loadImages]);
 
   const openSearch = (q) => {
-    navigate(`/search?q=${encodeURIComponent(q)}`);
+    navigate(`/?q=${encodeURIComponent(q)}`);
   };
 
   const openImage = (image) => {
@@ -168,6 +169,15 @@ function Shell() {
 
   const searchQuery = searchParams.get("q");
 
+  const handleNav = (key) => {
+    if (key === "upload") {
+      go(VIEW_PATH.upload);
+      return;
+    }
+    setFilter(key);
+    if (view !== "dashboard") go(VIEW_PATH.dashboard);
+  };
+
   return (
     <div className="h-screen w-screen flex flex-col overflow-hidden bg-background text-on-surface font-body-md text-body-md">
       <Taskbar
@@ -176,97 +186,107 @@ function Shell() {
         onUpload={() => go(VIEW_PATH.upload)}
       />
       <div className="flex-1 flex flex-col overflow-hidden">
-        {view === "dashboard" && (
-          <Dashboard
-            images={images}
-            loading={loading}
-            loadError={loadError}
-            onRetry={() => loadImages(filter)}
-            activeFilter={filter}
-            onFilter={setFilter}
-            onOpenImage={openImage}
-            onOpenList={openList}
-            onUpload={() => go(VIEW_PATH.upload)}
-            onSettings={() => go(VIEW_PATH.settings)}
-            onQuickTag={(image, tag) => quickTag(image, tag, patchImage)}
-            lastOpened={lastOpened}
-            onFavorite={async (image) => {
-              const row = await toggleFavorite(image);
-              if (filter === "favorites" && !row.favorite) {
-                removeFromList(row.object_key);
-              }
-              return row;
-            }}
-            onRestore={(objectKey) =>
-              updateImage(objectKey, { deleted: false })
-                .then((row) => {
-                  patchImage(objectKey, row);
-                  removeFromList(objectKey);
-                })
-                .catch((err) => {
-                  console.error("Restore failed:", err);
-                })
+        <div className="flex flex-1 overflow-hidden">
+          <SidePanel
+            activeKey={
+              view === "upload"
+                ? "upload"
+                : view === "dashboard"
+                  ? filter
+                  : null
             }
-          />
-        )}
-        {view === "upload" && (
-          <Upload
-            onBack={() => goBack()}
+            onNavigate={handleNav}
             onSettings={() => go(VIEW_PATH.settings)}
           />
-        )}
-        {view === "detail" && selected && (
-          <Detail
-            image={selected}
-            index={selectedIndex}
-            total={(detailList || images).length}
-            onBack={() => go(detailFrom)}
-            onNavigate={stepImage}
-            onUpdated={(row) => patchImage(row.object_key, row)}
-            onDeleted={() => {
-              removeFromList(selected.object_key);
-              go(detailFrom);
-            }}
-            onFavorite={async (image) => {
-              try {
-                const row = await toggleFavorite(image);
-                if (filter === "favorites" && image.favorite) {
-                  removeFromList(row.object_key);
-                  go(detailFrom);
+          <div className="flex-1 flex flex-col overflow-hidden">
+            {view === "dashboard" && (
+              <Dashboard
+                images={images}
+                loading={loading}
+                loadError={loadError}
+                onRetry={() => loadImages(filter)}
+                activeFilter={filter}
+                searchQuery={searchQuery}
+                onFilter={setFilter}
+                onOpenImage={openImage}
+                onOpenList={openList}
+                onUpload={() => go(VIEW_PATH.upload)}
+                onQuickTag={(image, tag) => quickTag(image, tag, patchImage)}
+                lastOpened={lastOpened}
+                onFavorite={async (image) => {
+                  const row = await toggleFavorite(image);
+                  if (filter === "favorites" && !row.favorite) {
+                    removeFromList(row.object_key);
+                  }
+                  return row;
+                }}
+                onRestore={(objectKey) =>
+                  updateImage(objectKey, { deleted: false })
+                    .then((row) => {
+                      patchImage(objectKey, row);
+                      removeFromList(objectKey);
+                    })
+                    .catch((err) => {
+                      console.error("Restore failed:", err);
+                    })
                 }
-              } catch (err) {
-                console.error("Favorite update failed:", err);
-              }
-            }}
-          />
-        )}
-        {view === "search" && (
-          <Search
-            query={searchQuery}
-            onOpenImage={openImage}
-            onOpenList={openList}
-            onUpload={() => go(VIEW_PATH.upload)}
-            onBack={() => goBack()}
-            onSettings={() => go(VIEW_PATH.settings)}
-            onBatch={(selected) => {
-              setPendingBatch(selected);
-              go(VIEW_PATH.collections);
-            }}
-          />
-        )}
-        {view === "collections" && (
-          <Collections
-            onBack={() => goBack()}
-            onOpenList={openList}
-            onUpload={() => go(VIEW_PATH.upload)}
-            onSettings={() => go(VIEW_PATH.settings)}
-            pendingBatch={pendingBatch}
-            onConsumedBatch={() => setPendingBatch(null)}
-          />
-        )}
-        {view === "settings" && (
-          <Settings imageCount={images.length} onBack={() => goBack()} />
-        )}
+              />
+            )}
+            {view === "upload" && <Upload />}
+            {view === "detail" && selected && (
+              <Detail
+                image={selected}
+                index={selectedIndex}
+                total={(detailList || images).length}
+                onBack={() => go(detailFrom)}
+                onNavigate={stepImage}
+                onUpdated={(row) => patchImage(row.object_key, row)}
+                onDeleted={() => {
+                  removeFromList(selected.object_key);
+                  go(detailFrom);
+                }}
+                onFavorite={async (image) => {
+                  try {
+                    const row = await toggleFavorite(image);
+                    if (filter === "favorites" && image.favorite) {
+                      removeFromList(row.object_key);
+                      go(detailFrom);
+                    }
+                  } catch (err) {
+                    console.error("Favorite update failed:", err);
+                  }
+                }}
+              />
+            )}
+            {view === "search" && (
+              <Search
+                query={searchQuery}
+                onOpenImage={openImage}
+                onOpenList={openList}
+                onUpload={() => go(VIEW_PATH.upload)}
+                onBack={() => goBack()}
+                onSettings={() => go(VIEW_PATH.settings)}
+                onBatch={(selected) => {
+                  setPendingBatch(selected);
+                  go(VIEW_PATH.collections);
+                }}
+              />
+            )}
+            {view === "collections" && (
+              <Collections
+                onBack={() => goBack()}
+                onOpenList={openList}
+                onUpload={() => go(VIEW_PATH.upload)}
+                onSettings={() => go(VIEW_PATH.settings)}
+                pendingBatch={pendingBatch}
+                onConsumedBatch={() => setPendingBatch(null)}
+              />
+            )}
+            {view === "settings" && (
+              <Settings imageCount={images.length} onBack={() => goBack()} />
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -302,14 +322,29 @@ export default function App() {
 
 function ProfileShell() {
   const navigate = useNavigate();
+  const go = (path) => navigate(path);
   return (
     <div className="h-screen w-screen flex flex-col overflow-hidden bg-background text-on-surface font-body-md text-body-md">
       <Taskbar
-        onSearch={(q) => navigate(`/search?q=${encodeURIComponent(q)}`)}
-        onSettings={() => navigate("/settings")}
-        onUpload={() => navigate("/upload")}
+        onSearch={(q) => navigate(`/?q=${encodeURIComponent(q)}`)}
+        onSettings={() => go("/settings")}
+        onUpload={() => go("/upload")}
       />
-      <Profile />
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <div className="flex flex-1 overflow-hidden">
+          <SidePanel
+            activeKey={null}
+            onNavigate={(key) => {
+              if (key === "upload") go("/upload");
+              else go("/");
+            }}
+            onSettings={() => go("/settings")}
+          />
+          <div className="flex-1 flex flex-col overflow-hidden">
+            <Profile />
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
