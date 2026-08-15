@@ -12,12 +12,6 @@ const NAV_ITEMS = [
   { key: "all", icon: "photo_library", label: "All Photos", fill: true },
   { key: "recent", icon: "schedule", label: "Recent", fill: false },
   { key: "favorites", icon: "star", label: "Favorites", fill: false },
-  {
-    key: "collections",
-    icon: "auto_awesome_motion",
-    label: "Collections",
-    fill: false,
-  },
   { key: "trash", icon: "delete", label: "Trash", fill: false },
 ];
 
@@ -133,7 +127,6 @@ export default function Dashboard({
   onOpenList,
   onUpload,
   onSearchView,
-  onCollections,
   onSettings,
   onQuickTag,
   onFavorite,
@@ -266,7 +259,7 @@ export default function Dashboard({
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `newslens-${activeFilter}-${Date.now()}.json`;
+    a.download = `kashida-archive-${activeFilter}-${Date.now()}.json`;
     a.style.display = "none";
     document.body.appendChild(a);
     a.click();
@@ -338,7 +331,7 @@ export default function Dashboard({
         <div className="flex justify-between items-center w-full px-margin-page py-unit h-16">
           <div className="flex items-center gap-gutter w-[320px]">
             <span className="font-headline-md text-headline-md text-primary tracking-tight font-semibold">
-              NewsLens
+              Kashida Archive
             </span>
           </div>
           <div className="flex-1 max-w-2xl mx-4">
@@ -351,7 +344,7 @@ export default function Dashboard({
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 className="w-full bg-[#F1F5F9] focus:bg-surface-container-lowest border-transparent focus:border-tertiary-container focus:ring-1 focus:ring-tertiary-container rounded-xl pl-10 pr-24 py-2.5 font-body-md text-body-md text-on-surface transition-colors placeholder-on-surface-variant outline-none"
-                placeholder="Search news assets... (Cmd+K)"
+                placeholder="Search Kashida Archive... (Cmd+K)"
                 type="text"
               />
               <button
@@ -390,7 +383,7 @@ export default function Dashboard({
               Library
             </h2>
             <p className="font-body-sm text-body-sm text-on-surface-variant">
-              News Assets
+              Visual Assets
             </p>
           </div>
           <nav className="flex-1 flex flex-col gap-1 font-label-caps text-label-caps">
@@ -398,18 +391,12 @@ export default function Dashboard({
               <button
                 key={item.key}
                 onClick={() => {
-                  if (item.key === "collections") {
-                    onCollections();
-                    return;
-                  }
                   searchIdRef.current += 1;
                   onFilter(item.key);
                   setResults(null);
                   setQuery("");
                 }}
-                className={
-                  activeFilter === item.key ? NAV_ACTIVE : NAV_LINK
-                }
+                className={activeFilter === item.key ? NAV_ACTIVE : NAV_LINK}
               >
                 <span
                   className="material-symbols-outlined"
@@ -426,13 +413,6 @@ export default function Dashboard({
             ))}
           </nav>
           <div className="mt-auto pt-4 border-t border-outline-variant flex flex-col gap-1 font-label-caps text-label-caps">
-            <button
-              onClick={onSearchView}
-              className="flex items-center gap-gutter text-on-surface-variant px-4 py-3 hover:bg-surface-container-highest transition-all font-label-caps text-label-caps"
-            >
-              <span className="material-symbols-outlined">bookmark</span>
-              Saved Searches
-            </button>
             <button
               onClick={onSettings}
               className="flex items-center gap-gutter text-on-surface-variant px-4 py-3 hover:bg-surface-container-highest transition-all font-label-caps text-label-caps"

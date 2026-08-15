@@ -6,6 +6,7 @@ import Search from "./views/Search.jsx";
 import Collections from "./views/Collections.jsx";
 import Settings from "./views/Settings.jsx";
 import { listImages, updateImage } from "./api.js";
+import { mergeTags } from "./tags.js";
 
 const VIEWS = [
   "dashboard",
@@ -129,7 +130,6 @@ export default function App() {
           onOpenList={openList}
           onUpload={() => setView("upload")}
           onSearchView={() => setView("search")}
-          onCollections={() => setView("collections")}
           onSettings={() => setView("settings")}
           onQuickTag={(image, tag) => quickTag(image, tag, patchImage)}
           lastOpened={lastOpened}
@@ -141,12 +141,14 @@ export default function App() {
             return row;
           }}
           onRestore={(objectKey) =>
-            updateImage(objectKey, { deleted: false }).then((row) => {
-              patchImage(objectKey, row);
-              removeFromList(objectKey);
-            }).catch((err) => {
-              console.error("Restore failed:", err);
-            })
+            updateImage(objectKey, { deleted: false })
+              .then((row) => {
+                patchImage(objectKey, row);
+                removeFromList(objectKey);
+              })
+              .catch((err) => {
+                console.error("Restore failed:", err);
+              })
           }
         />
       )}
@@ -221,10 +223,9 @@ export { VIEWS };
 async function quickTag(image, tag, patchImage) {
   if (!image) return;
   try {
-    const existing = (image.tags || "").split(" ").filter(Boolean);
-    if (existing.includes(tag)) return;
+    const merged = mergeTags(image.tags || "", [tag]);
     const row = await updateImage(image.object_key, {
-      tags: [...existing, tag].join(" "),
+      tags: merged.join(" "),
     });
     patchImage(image.object_key, row);
   } catch (err) {

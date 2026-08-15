@@ -56,9 +56,9 @@ export default function Search({
       return;
     }
     const termList = qq
-      ? (qq
-          .toLowerCase()
-          .match(/[\p{L}\p{N}]+/gu) || []).filter((t) => t.length > 1)
+      ? (qq.toLowerCase().match(/[\p{L}\p{N}]+/gu) || []).filter(
+          (t) => t.length > 1,
+        )
       : terms;
     if (termList.length === 0) {
       setSearching(false);
@@ -235,7 +235,7 @@ export default function Search({
             <span className="font-label-caps text-label-caps">Library</span>
           </button>
           <span className="font-headline-md text-headline-md text-primary tracking-tight font-bold">
-            NewsLens
+            Kashida Archive
           </span>
         </div>
         <div className="flex-1 max-w-2xl mx-12">

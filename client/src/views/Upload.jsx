@@ -66,7 +66,7 @@ export default function Upload({ onBack, onSettings }) {
       <header className="bg-surface-container-lowest border-b border-outline-variant flex justify-between items-center w-full px-margin-page py-unit h-16 z-50">
         <div className="flex items-center gap-4">
           <h1 className="font-headline-md text-headline-md text-primary font-bold tracking-tight">
-            NewsLens
+            Kashida Archive
           </h1>
         </div>
         <div className="flex-1 max-w-xl mx-8 hidden md:flex items-center bg-[#F1F5F9] focus-within:bg-white focus-within:border-tertiary-container focus-within:ring-1 focus-within:ring-tertiary-container border border-transparent rounded-lg px-3 py-2 transition-all">
@@ -75,7 +75,7 @@ export default function Upload({ onBack, onSettings }) {
           </span>
           <input
             className="bg-transparent border-none focus:ring-0 w-full text-body-md p-0 placeholder-on-surface-variant"
-            placeholder="Search NewsLens..."
+            placeholder="Search Kashida Archive..."
             type="text"
           />
           <span className="font-mono-data text-mono-data text-outline bg-surface-container-high px-1.5 rounded ml-2">
@@ -104,7 +104,7 @@ export default function Upload({ onBack, onSettings }) {
               Library
             </h2>
             <p className="font-body-sm text-body-sm text-on-surface-variant mt-1">
-              News Assets
+              Visual Assets
             </p>
           </div>
           <ul className="flex flex-col gap-2 mb-8">

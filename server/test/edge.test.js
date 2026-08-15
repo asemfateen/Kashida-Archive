@@ -140,10 +140,7 @@ test("literal /api/images/tag is not shadowed by the :objectKey route", async ()
     (await j("/api/images/tag", { method: "PATCH", body: "{}" })).status,
     405,
   );
-  assert.equal(
-    (await j("/api/images/tag", { method: "DELETE" })).status,
-    405,
-  );
+  assert.equal((await j("/api/images/tag", { method: "DELETE" })).status, 405);
 });
 
 test("PATCH tags rejects NUL and oversized values", async () => {
@@ -199,13 +196,19 @@ test("unknown /api route -> 404 JSON", async () => {
 test("tag route blocks SSRF imageUrl and gates the fetch path", async () => {
   const evil = await j("/api/images/tag", {
     method: "POST",
-    body: JSON.stringify({ objectKey: key("tag"), imageUrl: "https://evil.example/x.jpg" }),
+    body: JSON.stringify({
+      objectKey: key("tag"),
+      imageUrl: "https://evil.example/x.jpg",
+    }),
   });
   assert.equal(evil.status, 400);
 
   const fileScheme = await j("/api/images/tag", {
     method: "POST",
-    body: JSON.stringify({ objectKey: key("tag"), imageUrl: "file:///etc/passwd" }),
+    body: JSON.stringify({
+      objectKey: key("tag"),
+      imageUrl: "file:///etc/passwd",
+    }),
   });
   assert.equal(fileScheme.status, 400);
 
@@ -220,7 +223,10 @@ test("tag route blocks SSRF imageUrl and gates the fetch path", async () => {
 
   const missing = await j("/api/images/tag", {
     method: "POST",
-    body: JSON.stringify({ objectKey: key("tag"), imageUrl: `${base}/gone.jpg` }),
+    body: JSON.stringify({
+      objectKey: key("tag"),
+      imageUrl: `${base}/gone.jpg`,
+    }),
   });
   assert.equal(missing.status, 502);
 
@@ -270,4 +276,31 @@ test("rate limiter kicks in on burst of upload-url requests", async () => {
     throttled.length + statuses.filter((s) => s === 500).length,
     130,
   );
+});
+
+test("mergeTags appends new tags and dedupes case-insensitively", async () => {
+  const { mergeTags } = await import("../src/tagParser.js");
+
+  // Existing tags are preserved, AI tags appended.
+  assert.deepEqual(mergeTags("breaking news", ["election", "city"]), [
+    "breaking",
+    "news",
+    "election",
+    "city",
+  ]);
+
+  // Duplicates across existing/new are dropped (case-insensitive), keeping
+  // the existing casing.
+  assert.deepEqual(mergeTags("Breaking NEWS", ["breaking", "Election"]), [
+    "Breaking",
+    "NEWS",
+    "Election",
+  ]);
+
+  // New duplicates are dropped while new unique tags append.
+  assert.deepEqual(mergeTags("", ["a", "A", "b", "a"]), ["a", "b"]);
+
+  // Empty existing string and empty incoming both yield [].
+  assert.deepEqual(mergeTags("", []), []);
+  assert.deepEqual(mergeTags("  ", null), []);
 });

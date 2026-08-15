@@ -9,7 +9,7 @@ import { PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
 import { r2, R2_BUCKET, isR2Configured } from "./r2.js";
 import pool from "./db.js";
 import { ai, GEMINI_MODEL, isGeminiConfigured } from "./gemini.js";
-import { parseTags } from "./tagParser.js";
+import { parseTags, mergeTags } from "./tagParser.js";
 import initDb from "./initDb.js";
 
 const app = express();
@@ -72,7 +72,7 @@ const RATE_TAG = makeRateLimit({ windowMs: 60_000, max: 60 });
 
 app.get("/api/health", async (req, res) => {
   await dbInit;
-  res.json({ ok: true, service: "smart-image-archive", db: dbReady });
+  res.json({ ok: true, service: "kashida-archive", db: dbReady });
 });
 
 app.use("/api", async (req, res, next) => {
@@ -201,7 +201,10 @@ app.get("/api/images", async (req, res) => {
        ORDER BY created_at DESC LIMIT 200`,
     );
     res.json(
-      rows.map((row) => ({ ...row, url: publicUrl(publicBase, row.object_key) })),
+      rows.map((row) => ({
+        ...row,
+        url: publicUrl(publicBase, row.object_key),
+      })),
     );
   } catch (err) {
     console.error("List images failed:", err.message);
@@ -263,7 +266,10 @@ app.get("/api/images/:objectKey", async (req, res) => {
     if (rows.length === 0) {
       return res.status(404).json({ error: "image not found" });
     }
-    const publicBase = (process.env.R2_PUBLIC_BASE_URL || "").replace(/\/+$/, "");
+    const publicBase = (process.env.R2_PUBLIC_BASE_URL || "").replace(
+      /\/+$/,
+      "",
+    );
     res.json({ ...rows[0], url: publicUrl(publicBase, rows[0].object_key) });
   } catch (err) {
     console.error("Get image failed:", err.message);
@@ -337,7 +343,11 @@ app.delete("/api/images/:objectKey", async (req, res) => {
 });
 
 function buildTsQuery(raw) {
-  const terms = (String(raw).toLowerCase().match(/[\p{L}\p{N}]+/gu) || [])
+  const terms = (
+    String(raw)
+      .toLowerCase()
+      .match(/[\p{L}\p{N}]+/gu) || []
+  )
     .filter((t) => t.length > 0)
     .slice(0, 50);
   if (terms.length === 0) return null;
@@ -408,7 +418,10 @@ const MAX_TAG_IMAGE_BYTES = 10 * 1024 * 1024;
 function checkImageUrl(imageUrl) {
   const base = (process.env.R2_PUBLIC_BASE_URL || "").replace(/\/+$/, "");
   if (!base) {
-    return { ok: false, error: "imageUrl requires R2_PUBLIC_BASE_URL to be configured" };
+    return {
+      ok: false,
+      error: "imageUrl requires R2_PUBLIC_BASE_URL to be configured",
+    };
   }
   let url;
   let origin;
@@ -422,7 +435,10 @@ function checkImageUrl(imageUrl) {
     return { ok: false, error: "imageUrl must be http(s)" };
   }
   if (url.origin !== origin.origin) {
-    return { ok: false, error: "imageUrl must be hosted by the configured storage origin" };
+    return {
+      ok: false,
+      error: "imageUrl must be hosted by the configured storage origin",
+    };
   }
   return { ok: true };
 }
@@ -445,13 +461,15 @@ async function fetchTagImage(url) {
       const { done, value } = await reader.read();
       if (done) break;
       total += value.byteLength;
-      if (total > MAX_TAG_IMAGE_BYTES) throw new Error("image reference too large");
+      if (total > MAX_TAG_IMAGE_BYTES)
+        throw new Error("image reference too large");
       chunks.push(value);
     }
     return { mime: type, data: Buffer.concat(chunks).toString("base64") };
   }
   const buf = Buffer.from(await imageRes.arrayBuffer());
-  if (buf.byteLength > MAX_TAG_IMAGE_BYTES) throw new Error("image reference too large");
+  if (buf.byteLength > MAX_TAG_IMAGE_BYTES)
+    throw new Error("image reference too large");
   return { mime: type, data: buf.toString("base64") };
 }
 
@@ -515,10 +533,21 @@ app.post("/api/images/tag", RATE_TAG, async (req, res) => {
         .json({ error: "Gemini response was not a tag array" });
     }
 
+    // Merge — never overwrite: keep existing tags, append the new AI tags,
+    // and dedupe case-insensitively so the stored set stays clean.
+    const current = await pool.query(
+      `SELECT tags FROM images WHERE object_key = $1 LIMIT 1`,
+      [objectKey],
+    );
+    if (current.rows.length === 0) {
+      return res.status(404).json({ error: "image not found" });
+    }
+    const merged = mergeTags(current.rows[0].tags, tags);
+
     const { rows } = await pool.query(
       `UPDATE images SET tags = $1 WHERE object_key = $2
        RETURNING id, object_key, original_filename, tags, created_at`,
-      [tags.join(" "), objectKey],
+      [merged.join(" "), objectKey],
     );
     if (rows.length === 0) {
       return res.status(404).json({ error: "image not found" });
@@ -534,20 +563,22 @@ app.post("/api/images/tag", RATE_TAG, async (req, res) => {
 const CLIENT_DIST = fileURLToPath(
   new URL("../../client/dist/", import.meta.url),
 );
+const SETUP_HTML = `<!doctype html><html><body style="font-family:system-ui;background:#0b0f19;color:#e2e8f0;display:grid;place-items:center;height:100vh;margin:0">
+  <div style="max-width:560px;text-align:center"><h1>Kashida Archive</h1>
+  <p>Database is not ready.</p>
+  <p style="color:#94a3b8;font-size:14px">DATABASE_URL is not configured. Kashida Archive detected the issue and is attempting to connect. Please check the service logs for details.</p>
+  <p style="color:#94a3b8;font-size:13px">If you deployed a Postgres database, ensure the DATABASE_URL variable is set to the connection string and redeploy.</p></div></body></html>`;
 if (isProduction && existsSync(CLIENT_DIST)) {
+  // Degraded-mode guard first: without a ready DB the SPA can't function, so
+  // non-API requests get the setup page (503) instead of a working-looking
+  // shell from the static middleware below.
+  app.use((req, res, next) => {
+    if (dbReady || req.path.startsWith("/api")) return next();
+    res.status(503).type("html").send(SETUP_HTML);
+  });
   app.use(express.static(CLIENT_DIST));
   app.get(/^(?!\/api(?:\/|$)).*/i, (_req, res) => {
-    if (dbReady) return res.sendFile(`${CLIENT_DIST}/index.html`);
-    res
-      .status(503)
-      .type("html")
-      .send(
-        `<!doctype html><html><body style="font-family:system-ui;background:#0b0f19;color:#e2e8f0;display:grid;place-items:center;height:100vh;margin:0">
-        <div style="max-width:560px;text-align:center"><h1>NewsLens</h1>
-        <p>Database is not ready.</p>
-        <p style="color:#94a3b8;font-size:14px">DATABASE_URL is not configured. Railway detected the issue and is attempting to connect. Please check the service logs for details.</p>
-        <p style="color:#94a3b8;font-size:13px">If you deployed a Postgres database, ensure the DATABASE_URL variable is set to the connection string and redeploy.</p></div></body></html>`,
-      );
+    res.sendFile(`${CLIENT_DIST}/index.html`);
   });
 }
 
@@ -599,4 +630,3 @@ process.on("SIGTERM", () => shutdown("SIGTERM"));
 process.on("SIGINT", () => shutdown("SIGINT"));
 
 export { app, server };
-

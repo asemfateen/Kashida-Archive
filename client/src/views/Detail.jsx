@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { tagImage, updateImage, deleteImage } from "../api.js";
 import { collections } from "../store.js";
+import { mergeTags } from "../tags.js";
 import Avatar from "../components/Avatar.jsx";
 
 const DEFAULT_PROMPT = "Give me 5 descriptive keywords for this image.";
@@ -204,9 +205,15 @@ export default function Detail({
         ? { objectKey: requestedKey, thumbnail, prompt }
         : { objectKey: requestedKey, imageUrl: src, prompt };
       const res = await tagImage(payload);
-      onUpdated({ object_key: requestedKey, tags: res.tags.join(" ") });
+      // The server merges the AI tags into the existing set (case-insensitive
+      // dedupe). Prefer its stored value; fall back to a local merge so the UI
+      // never shows an overwritten tag set.
+      const merged = res.image?.tags
+        ? res.image.tags.split(" ").filter(Boolean)
+        : mergeTags(image.tags || "", res.tags);
+      onUpdated({ object_key: requestedKey, tags: merged.join(" ") });
       if (keyRef.current === requestedKey) {
-        setTags(res.tags);
+        setTags(merged);
       }
     } catch (err) {
       if (keyRef.current === requestedKey) setTagError(err.message);
@@ -237,7 +244,7 @@ export default function Detail({
       <nav className="bg-surface-container-lowest border-b border-outline-variant flex justify-between items-center w-full px-margin-page py-unit h-16 z-50">
         <div className="flex items-center gap-gutter">
           <span className="font-headline-md text-headline-md text-primary">
-            NewsLens
+            Kashida Archive
           </span>
           <div className="ml-8 flex items-center bg-surface-container-low rounded-lg border border-outline-variant px-3 py-1.5 focus-within:bg-surface-container-lowest focus-within:border-tertiary-container transition-colors">
             <span
@@ -323,7 +330,10 @@ export default function Detail({
               <div
                 className="w-full h-full overflow-auto flex items-center justify-center cursor-grab"
                 onClick={(e) => {
-                  if (e.target.tagName === "IMG" || e.target === e.currentTarget) {
+                  if (
+                    e.target.tagName === "IMG" ||
+                    e.target === e.currentTarget
+                  ) {
                     setZoom((z) => (z === 1 ? 1.5 : 1));
                   }
                 }}

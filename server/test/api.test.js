@@ -65,7 +65,7 @@ test("GET /api/health returns ok", async () => {
   const { status, body } = await j("/api/health");
   assert.equal(status, 200);
   assert.equal(body.ok, true);
-  assert.equal(body.service, "smart-image-archive");
+  assert.equal(body.service, "kashida-archive");
   assert.equal(body.db, true);
 });
 

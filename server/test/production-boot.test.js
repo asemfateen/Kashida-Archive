@@ -2,6 +2,9 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+
+const SERVER_DIR = fileURLToPath(new URL("../", import.meta.url));
 
 const pickPort = () => 30000 + Math.floor(Math.random() * 20000);
 
@@ -21,7 +24,7 @@ async function waitFor(url, attempts = 40) {
 function startServer(extraEnv = {}) {
   const port = pickPort();
   const child = spawn(process.execPath, ["src/index.js"], {
-    cwd: new URL("../", import.meta.url).pathname,
+    cwd: SERVER_DIR,
     env: {
       ...process.env,
       NODE_ENV: "production",

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
- * Deployment smoke test — point it at any NewsLens deployment:
- *   node scripts/check-deploy.mjs https://newslens-production-xxxx.up.railway.app
+ * Deployment smoke test — point it at any Kashida Archive deployment:
+ *   node scripts/check-deploy.mjs https://kashida-archive-production-xxxx.up.railway.app
  * Exits non-zero if any check fails.
  */
 
