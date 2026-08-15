@@ -77,7 +77,7 @@ function makeRateLimit({ windowMs, max }) {
   limiter.reset = () => hits.clear();
   return limiter;
 }
-const RATE_UPLOAD = makeRateLimit({ windowMs: 60_000, max: 120 });
+const RATE_UPLOAD = makeRateLimit({ windowMs: 60_000, max: 600 });
 const RATE_TAG = makeRateLimit({ windowMs: 60_000, max: 60 });
 // Tests reset these between cases to avoid cross-test leaks.
 export { RATE_UPLOAD, RATE_TAG };
@@ -122,18 +122,8 @@ app.use("/api", (req, res, next) => {
 const ALLOWED_EXTENSIONS = /\.(jpg|jpeg|png|webp|gif|heic|tiff|raw)$/i;
 const MIME_RE = /^[a-z0-9!#$&^_.+-]+\/[a-z0-9!#$&^_.+-]+$/i;
 
-// Folder names are single-path labels: no slashes, backslashes or ".." so a
-// folder can never escape its namespace or address a parent directory.
-function validFolder(value) {
-  if (typeof value !== "string" || value.length > 200) return false;
-  if (value.includes("\0")) return false;
-  if (value.includes("/") || value.includes("\\") || value.includes(".."))
-    return false;
-  return true;
-}
-
 app.post("/api/upload-url", RATE_UPLOAD, async (req, res) => {
-  const { filename, contentType, folder } = req.body || {};
+  const { filename, contentType } = req.body || {};
 
   if (!filename || typeof filename !== "string") {
     return res.status(400).json({ error: "filename is required" });
@@ -151,10 +141,6 @@ app.post("/api/upload-url", RATE_UPLOAD, async (req, res) => {
       !MIME_RE.test(contentType))
   ) {
     return res.status(400).json({ error: "invalid contentType" });
-  }
-
-  if (folder !== undefined && !validFolder(folder)) {
-    return res.status(400).json({ error: "invalid folder" });
   }
 
   if (!isR2Configured()) {
@@ -184,7 +170,7 @@ app.post("/api/upload-url", RATE_UPLOAD, async (req, res) => {
 });
 
 app.post("/api/images", async (req, res) => {
-  const { objectKey, originalFilename, folder } = req.body || {};
+  const { objectKey, originalFilename } = req.body || {};
   const invalidKey =
     typeof objectKey !== "string" ||
     objectKey.length === 0 ||
@@ -200,15 +186,12 @@ app.post("/api/images", async (req, res) => {
       .status(400)
       .json({ error: "objectKey and originalFilename are required" });
   }
-  if (folder !== undefined && !validFolder(folder)) {
-    return res.status(400).json({ error: "invalid folder" });
-  }
 
   try {
     const { rows } = await pool.query(
-      `INSERT INTO images (object_key, original_filename, folder) VALUES ($1, $2, $3)
-       RETURNING id, object_key, original_filename, tags, favorite, deleted, folder, created_at`,
-      [objectKey, originalFilename, folder ?? ""],
+      `INSERT INTO images (object_key, original_filename) VALUES ($1, $2)
+       RETURNING id, object_key, original_filename, tags, favorite, deleted, created_at`,
+      [objectKey, originalFilename],
     );
     res.status(201).json(rows[0]);
   } catch (err) {
@@ -245,22 +228,11 @@ app.get("/api/images", async (req, res) => {
   if (view === "trash") where = "deleted = true";
   else if (view === "favorites") where = "deleted = false AND favorite = true";
 
-  const params = [];
-  if (req.query.folder !== undefined) {
-    const folder = String(req.query.folder);
-    if (!validFolder(folder)) {
-      return res.status(400).json({ error: "invalid folder" });
-    }
-    params.push(folder);
-    where += ` AND folder = $${params.length}`;
-  }
-
   try {
     const { rows } = await pool.query(
-      `SELECT id, object_key, original_filename, tags, favorite, deleted, folder, created_at
+      `SELECT id, object_key, original_filename, tags, favorite, deleted, created_at
        FROM images WHERE ${where}
        ORDER BY created_at DESC LIMIT 200`,
-      params,
     );
     res.json(
       rows.map((row) => ({
@@ -271,22 +243,6 @@ app.get("/api/images", async (req, res) => {
   } catch (err) {
     console.error("List images failed:", err.message);
     res.status(500).json({ error: "failed to list images" });
-  }
-});
-
-app.get("/api/folders", async (_req, res) => {
-  try {
-    const { rows } = await pool.query(
-      `SELECT folder, COUNT(*)::int AS count
-       FROM images
-       WHERE deleted = false AND folder <> ''
-       GROUP BY folder
-       ORDER BY folder COLLATE "C" ASC`,
-    );
-    res.json(rows);
-  } catch (err) {
-    console.error("List folders failed:", err.message);
-    res.status(500).json({ error: "failed to list folders" });
   }
 });
 
@@ -337,7 +293,7 @@ app.get("/api/images/:objectKey", async (req, res) => {
   }
   try {
     const { rows } = await pool.query(
-      `SELECT id, object_key, original_filename, tags, favorite, deleted, folder, created_at
+      `SELECT id, object_key, original_filename, tags, favorite, deleted, created_at
        FROM images WHERE object_key = $1 LIMIT 1`,
       [objectKey],
     );
@@ -360,7 +316,7 @@ app.patch("/api/images/:objectKey", async (req, res) => {
   if (objectKey.includes("\0")) {
     return res.status(400).json({ error: "invalid objectKey" });
   }
-  const { tags, favorite, deleted, folder } = req.body || {};
+  const { tags, favorite, deleted } = req.body || {};
 
   const sets = [];
   const values = [];
@@ -379,13 +335,6 @@ app.patch("/api/images/:objectKey", async (req, res) => {
     values.push(deleted);
     sets.push(`deleted = $${values.length}`);
   }
-  if (folder !== undefined) {
-    if (!validFolder(folder)) {
-      return res.status(400).json({ error: "invalid folder" });
-    }
-    values.push(folder);
-    sets.push(`folder = $${values.length}`);
-  }
   if (sets.length === 0) {
     return res.status(400).json({ error: "nothing to update" });
   }
@@ -394,7 +343,7 @@ app.patch("/api/images/:objectKey", async (req, res) => {
   try {
     const { rows } = await pool.query(
       `UPDATE images SET ${sets.join(", ")} WHERE object_key = $${values.length}
-       RETURNING id, object_key, original_filename, tags, favorite, deleted, folder, created_at`,
+       RETURNING id, object_key, original_filename, tags, favorite, deleted, created_at`,
       values,
     );
     if (rows.length === 0) {
@@ -473,7 +422,7 @@ app.get("/api/search", async (req, res) => {
 
   try {
     const result = await pool.query(
-      `SELECT id, object_key, original_filename, tags, favorite, folder, created_at,
+      `SELECT id, object_key, original_filename, tags, favorite, created_at,
               ${RANK_SQL}
        FROM images
        WHERE ${WHERE_SQL}
@@ -494,7 +443,7 @@ app.get("/api/search", async (req, res) => {
     if (err?.code === "42883" || /pg_trgm|operator.*\?/i.test(err.message)) {
       try {
         const result = await pool.query(
-          `SELECT id, object_key, original_filename, tags, favorite, folder, created_at,
+          `SELECT id, object_key, original_filename, tags, favorite, created_at,
                   ts_rank(search_vector, to_tsquery('simple', $1)) AS rank
            FROM images
            WHERE (search_vector @@ to_tsquery('simple', $1) OR tags ILIKE $2)

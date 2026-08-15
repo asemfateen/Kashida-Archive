@@ -14,7 +14,6 @@ CREATE INDEX IF NOT EXISTS images_search_vector_idx ON images USING GIN (search_
 
 ALTER TABLE images ADD COLUMN IF NOT EXISTS favorite BOOLEAN NOT NULL DEFAULT false;
 ALTER TABLE images ADD COLUMN IF NOT EXISTS deleted BOOLEAN NOT NULL DEFAULT false;
-ALTER TABLE images ADD COLUMN IF NOT EXISTS folder TEXT NOT NULL DEFAULT '';
 
 -- search_vector must be added via ALTER for pre-existing databases, not only in
 -- the CREATE TABLE. Adding the column then the index is idempotent on both.
@@ -25,7 +24,6 @@ CREATE INDEX IF NOT EXISTS images_search_vector_idx ON images USING GIN (search_
 CREATE INDEX IF NOT EXISTS images_active_created_idx ON images (created_at DESC) WHERE deleted = false;
 CREATE INDEX IF NOT EXISTS images_favorites_idx ON images (created_at DESC) WHERE deleted = false AND favorite;
 CREATE INDEX IF NOT EXISTS images_deleted_idx ON images (created_at DESC) WHERE deleted = true;
-CREATE INDEX IF NOT EXISTS images_folder_idx ON images (folder, created_at DESC) WHERE deleted = false;
 
 -- Trigram index so tags ILIKE '%term%' and similarity() stay fast. gin_trgm_ops
 -- covers both the % similarity operator and word_similarity().

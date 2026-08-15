@@ -13,22 +13,21 @@ function authHeaders(extra = {}) {
   return headers;
 }
 
-export async function getUploadUrl(filename, contentType, folder) {
+export async function getUploadUrl(filename, contentType) {
   const res = await fetch("/api/upload-url", {
     method: "POST",
     headers: authHeaders({ "Content-Type": "application/json" }),
-    body: JSON.stringify({ filename, contentType, folder }),
+    body: JSON.stringify({ filename, contentType }),
   });
   if (!res.ok)
     throw new Error((await res.json()).error || "failed to get upload URL");
   return res.json();
 }
 
-export async function uploadFile(file, folder) {
+export async function uploadFile(file) {
   const { objectKey, uploadUrl } = await getUploadUrl(
     file.name,
     file.type || "application/octet-stream",
-    folder,
   );
   const res = await fetch(uploadUrl, {
     method: "PUT",
@@ -36,15 +35,15 @@ export async function uploadFile(file, folder) {
     body: file,
   });
   if (!res.ok) throw new Error("R2 upload failed");
-  await saveImage(objectKey, file.name, folder);
+  await saveImage(objectKey, file.name);
   return { objectKey };
 }
 
-export async function saveImage(objectKey, originalFilename, folder) {
+export async function saveImage(objectKey, originalFilename) {
   const res = await fetch("/api/images", {
     method: "POST",
     headers: authHeaders({ "Content-Type": "application/json" }),
-    body: JSON.stringify({ objectKey, originalFilename, folder }),
+    body: JSON.stringify({ objectKey, originalFilename }),
   });
   if (!res.ok)
     throw new Error((await res.json()).error || "failed to save image");
@@ -60,24 +59,13 @@ export async function searchImages(q, sort) {
   return res.json();
 }
 
-export async function listImages(view, folder) {
-  const params = new URLSearchParams();
-  if (view) params.set("view", view);
-  if (folder) params.set("folder", folder);
-  const res = await fetch(`/api/images?${params}`, {
+export async function listImages(view) {
+  const params = view ? `?view=${view}` : "";
+  const res = await fetch(`/api/images${params}`, {
     headers: authHeaders(),
   });
   if (!res.ok)
     throw new Error((await res.json()).error || "failed to load images");
-  return res.json();
-}
-
-export async function getFolders() {
-  const res = await fetch("/api/folders", {
-    headers: authHeaders(),
-  });
-  if (!res.ok)
-    throw new Error((await res.json()).error || "failed to load folders");
   return res.json();
 }
 

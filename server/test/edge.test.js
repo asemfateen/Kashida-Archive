@@ -305,7 +305,7 @@ test("concurrent searches all succeed", async () => {
 test("rate limiter kicks in on burst of upload-url requests", async () => {
   RATE_UPLOAD.reset();
   const results = await Promise.all(
-    Array.from({ length: 130 }, () =>
+    Array.from({ length: 620 }, () =>
       j("/api/upload-url", {
         method: "POST",
         body: JSON.stringify({ filename: "burst.jpg" }),
@@ -317,7 +317,7 @@ test("rate limiter kicks in on burst of upload-url requests", async () => {
   assert.ok(throttled.length > 0, "expected at least one 429");
   assert.equal(
     throttled.length + statuses.filter((s) => s === 500).length,
-    130,
+    620,
   );
 });
 
