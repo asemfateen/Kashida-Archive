@@ -1,4 +1,15 @@
 import { useCallback, useEffect, useState } from "react";
+import {
+  BrowserRouter,
+  Navigate,
+  Route,
+  Routes,
+  useLocation,
+} from "react-router-dom";
+import { AuthProvider, useAuth } from "./auth.jsx";
+import Taskbar from "./components/Taskbar.jsx";
+import Login from "./views/Login.jsx";
+import Profile from "./views/Profile.jsx";
 import Dashboard from "./views/Dashboard.jsx";
 import Upload from "./views/Upload.jsx";
 import Detail from "./views/Detail.jsx";
@@ -17,7 +28,16 @@ const VIEWS = [
   "settings",
 ];
 
-export default function App() {
+function Guard({ children }) {
+  const { isAuthed } = useAuth();
+  const location = useLocation();
+  if (!isAuthed)
+    return <Navigate to="/login" replace state={{ from: location }} />;
+  return children;
+}
+
+function Shell() {
+  const location = useLocation();
   const [view, setView] = useState("dashboard");
   const [filter, setFilter] = useState("all");
   const [images, setImages] = useState([]);
@@ -28,6 +48,7 @@ export default function App() {
   const [pendingBatch, setPendingBatch] = useState(null);
   const [detailFrom, setDetailFrom] = useState("dashboard");
   const [loadError, setLoadError] = useState(null);
+  const [searchQuery, setSearchQuery] = useState(null);
 
   const loadImages = useCallback(async (v) => {
     setLoading(true);
@@ -116,105 +137,139 @@ export default function App() {
       ? (detailList || images)[selectedIndex] || null
       : null;
 
+  const openSearch = (q) => {
+    setSearchQuery(q);
+    setView("search");
+  };
+
+  // Home link lands on the dashboard: reset the view whenever the shell route
+  // changes (e.g. returning from /profile via the Home link).
+  useEffect(() => {
+    setView("dashboard");
+  }, [location.pathname]);
+
   return (
     <div className="h-screen w-screen flex flex-col overflow-hidden bg-background text-on-surface font-body-md text-body-md">
-      {view === "dashboard" && (
-        <Dashboard
-          images={images}
-          loading={loading}
-          loadError={loadError}
-          onRetry={() => loadImages(filter)}
-          activeFilter={filter}
-          onFilter={setFilter}
-          onOpenImage={openImage}
-          onOpenList={openList}
-          onUpload={() => setView("upload")}
-          onSearchView={() => setView("search")}
-          onSettings={() => setView("settings")}
-          onQuickTag={(image, tag) => quickTag(image, tag, patchImage)}
-          lastOpened={lastOpened}
-          onFavorite={async (image) => {
-            const row = await toggleFavorite(image);
-            if (filter === "favorites" && !row.favorite) {
-              removeFromList(row.object_key);
-            }
-            return row;
-          }}
-          onRestore={(objectKey) =>
-            updateImage(objectKey, { deleted: false })
-              .then((row) => {
-                patchImage(objectKey, row);
-                removeFromList(objectKey);
-              })
-              .catch((err) => {
-                console.error("Restore failed:", err);
-              })
-          }
-        />
-      )}
-      {view === "upload" && (
-        <Upload
-          onBack={() => setView("dashboard")}
-          onSettings={() => setView("settings")}
-        />
-      )}
-      {view === "detail" && selected && (
-        <Detail
-          image={selected}
-          index={selectedIndex}
-          total={(detailList || images).length}
-          onBack={() => setView(detailFrom)}
-          onNavigate={navigate}
-          onUpdated={(row) => patchImage(row.object_key, row)}
-          onDeleted={() => {
-            removeFromList(selected.object_key);
-            setView(detailFrom);
-          }}
-          onFavorite={async (image) => {
-            try {
+      <Taskbar onSearch={openSearch} />
+      <div className="flex-1 flex flex-col overflow-hidden">
+        {view === "dashboard" && (
+          <Dashboard
+            images={images}
+            loading={loading}
+            loadError={loadError}
+            onRetry={() => loadImages(filter)}
+            activeFilter={filter}
+            onFilter={setFilter}
+            onOpenImage={openImage}
+            onOpenList={openList}
+            onUpload={() => setView("upload")}
+            onSettings={() => setView("settings")}
+            onQuickTag={(image, tag) => quickTag(image, tag, patchImage)}
+            lastOpened={lastOpened}
+            onFavorite={async (image) => {
               const row = await toggleFavorite(image);
-              if (filter === "favorites" && image.favorite) {
+              if (filter === "favorites" && !row.favorite) {
                 removeFromList(row.object_key);
-                setView(detailFrom);
               }
-            } catch (err) {
-              console.error("Favorite update failed:", err);
+              return row;
+            }}
+            onRestore={(objectKey) =>
+              updateImage(objectKey, { deleted: false })
+                .then((row) => {
+                  patchImage(objectKey, row);
+                  removeFromList(objectKey);
+                })
+                .catch((err) => {
+                  console.error("Restore failed:", err);
+                })
             }
-          }}
-        />
-      )}
-      {view === "search" && (
-        <Search
-          onOpenImage={openImage}
-          onOpenList={openList}
-          onUpload={() => setView("upload")}
-          onBack={() => setView("dashboard")}
-          onCollections={() => setView("collections")}
-          onSettings={() => setView("settings")}
-          onBatch={(selected) => {
-            setPendingBatch(selected);
-            setView("collections");
-          }}
-        />
-      )}
-      {view === "collections" && (
-        <Collections
-          onBack={() => setView("dashboard")}
-          onOpenList={openList}
-          onUpload={() => setView("upload")}
-          onSettings={() => setView("settings")}
-          onSearchView={() => setView("search")}
-          pendingBatch={pendingBatch}
-          onConsumedBatch={() => setPendingBatch(null)}
-        />
-      )}
-      {view === "settings" && (
-        <Settings
-          onBack={() => setView("dashboard")}
-          imageCount={images.length}
-        />
-      )}
+          />
+        )}
+        {view === "upload" && <Upload onBack={() => setView("dashboard")} />}
+        {view === "detail" && selected && (
+          <Detail
+            image={selected}
+            index={selectedIndex}
+            total={(detailList || images).length}
+            onBack={() => setView(detailFrom)}
+            onNavigate={navigate}
+            onUpdated={(row) => patchImage(row.object_key, row)}
+            onDeleted={() => {
+              removeFromList(selected.object_key);
+              setView(detailFrom);
+            }}
+            onFavorite={async (image) => {
+              try {
+                const row = await toggleFavorite(image);
+                if (filter === "favorites" && image.favorite) {
+                  removeFromList(row.object_key);
+                  setView(detailFrom);
+                }
+              } catch (err) {
+                console.error("Favorite update failed:", err);
+              }
+            }}
+          />
+        )}
+        {view === "search" && (
+          <Search
+            query={searchQuery}
+            onSearchHandled={() => setSearchQuery(null)}
+            onOpenImage={openImage}
+            onOpenList={openList}
+            onUpload={() => setView("upload")}
+            onBack={() => setView("dashboard")}
+            onSettings={() => setView("settings")}
+            onBatch={(selected) => {
+              setPendingBatch(selected);
+              setView("collections");
+            }}
+          />
+        )}
+        {view === "collections" && (
+          <Collections
+            onBack={() => setView("dashboard")}
+            onOpenList={openList}
+            onUpload={() => setView("upload")}
+            onSettings={() => setView("settings")}
+            pendingBatch={pendingBatch}
+            onConsumedBatch={() => setPendingBatch(null)}
+          />
+        )}
+        {view === "settings" && <Settings imageCount={images.length} />}
+      </div>
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <BrowserRouter>
+      <AuthProvider>
+        <Routes>
+          <Route path="/login" element={<Login />} />
+          <Route
+            path="/profile"
+            element={
+              <Guard>
+                <div className="h-screen w-screen flex flex-col overflow-hidden bg-background text-on-surface font-body-md text-body-md">
+                  <Taskbar onSearch={() => {}} />
+                  <Profile />
+                </div>
+              </Guard>
+            }
+          />
+          <Route
+            path="/*"
+            element={
+              <Guard>
+                <Shell key="shell" />
+              </Guard>
+            }
+          />
+        </Routes>
+      </AuthProvider>
+    </BrowserRouter>
   );
 }
 

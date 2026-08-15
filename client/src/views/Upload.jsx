@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import { uploadFile } from "../api.js";
-import Avatar from "../components/Avatar.jsx";
 
 const NAV_LINK =
   "flex items-center gap-gutter text-on-surface-variant px-4 py-3 hover:bg-surface-container-highest transition-all rounded-xl font-label-caps text-label-caps translate-x-1 hover:translate-x-0";
@@ -11,7 +10,7 @@ const STATUS_STYLES = {
   error: "bg-error-container text-on-error-container",
 };
 
-export default function Upload({ onBack, onSettings }) {
+export default function Upload({ onBack }) {
   const [uploads, setUploads] = useState([]);
   const [dragging, setDragging] = useState(false);
   const inputRef = useRef(null);
@@ -62,40 +61,6 @@ export default function Upload({ onBack, onSettings }) {
 
   return (
     <>
-      {/* TopNavBar */}
-      <header className="bg-surface-container-lowest border-b border-outline-variant flex justify-between items-center w-full px-margin-page py-unit h-16 z-50">
-        <div className="flex items-center gap-4">
-          <h1 className="font-headline-md text-headline-md text-primary font-bold tracking-tight">
-            Kashida Archive
-          </h1>
-        </div>
-        <div className="flex-1 max-w-xl mx-8 hidden md:flex items-center bg-[#F1F5F9] focus-within:bg-white focus-within:border-tertiary-container focus-within:ring-1 focus-within:ring-tertiary-container border border-transparent rounded-lg px-3 py-2 transition-all">
-          <span className="material-symbols-outlined text-outline mr-2">
-            search
-          </span>
-          <input
-            className="bg-transparent border-none focus:ring-0 w-full text-body-md p-0 placeholder-on-surface-variant"
-            placeholder="Search Kashida Archive..."
-            type="text"
-          />
-          <span className="font-mono-data text-mono-data text-outline bg-surface-container-high px-1.5 rounded ml-2">
-            ⌘K
-          </span>
-        </div>
-        <div className="flex items-center gap-4">
-          <button className="text-on-surface-variant hover:bg-surface-container transition-colors p-2 rounded-full scale-95 active:opacity-80 transition-transform">
-            <span className="material-symbols-outlined">notifications</span>
-          </button>
-          <button className="text-on-surface-variant hover:bg-surface-container transition-colors p-2 rounded-full scale-95 active:opacity-80 transition-transform">
-            <span className="material-symbols-outlined">settings</span>
-          </button>
-          <button className="bg-tertiary text-on-tertiary font-label-caps text-label-caps px-4 py-2 rounded scale-95 active:opacity-80 transition-transform">
-            Upload
-          </button>
-          <Avatar />
-        </div>
-      </header>
-
       <div className="flex flex-1 overflow-hidden">
         {/* SideNavBar */}
         <nav className="hidden lg:flex fixed left-0 top-16 h-[calc(100vh-64px)] w-panel-width-fixed flex-col p-4 z-40 bg-surface-container-low border-r border-outline-variant">
@@ -111,7 +76,7 @@ export default function Upload({ onBack, onSettings }) {
             <li>
               <a
                 className={NAV_LINK}
-                href="#"
+                href="/"
                 onClick={(e) => {
                   e.preventDefault();
                   onBack();
@@ -124,7 +89,7 @@ export default function Upload({ onBack, onSettings }) {
             <li>
               <a
                 className="flex items-center gap-gutter bg-surface-container-high text-primary rounded-xl px-4 py-3 transition-all font-label-caps text-label-caps"
-                href="#"
+                href="/upload"
               >
                 <span
                   className="material-symbols-outlined"
@@ -136,21 +101,21 @@ export default function Upload({ onBack, onSettings }) {
               </a>
             </li>
             <li>
-              <a className={NAV_LINK} href="#">
+              <a
+                className={NAV_LINK}
+                href="/"
+                onClick={(e) => {
+                  e.preventDefault();
+                  onBack();
+                }}
+              >
                 <span className="material-symbols-outlined">schedule</span>
                 Recent
               </a>
             </li>
           </ul>
           <div className="mt-auto pt-4 border-t border-outline-variant flex flex-col gap-1 font-label-caps text-label-caps">
-            <a
-              className={NAV_LINK}
-              href="#"
-              onClick={(e) => {
-                e.preventDefault();
-                onSettings();
-              }}
-            >
+            <a className={NAV_LINK} href="/">
               <span className="material-symbols-outlined">settings</span>
               Settings
             </a>

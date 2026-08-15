@@ -1,7 +1,22 @@
+function getToken() {
+  try {
+    return localStorage.getItem("kashida_token");
+  } catch {
+    return null;
+  }
+}
+
+function authHeaders(extra = {}) {
+  const headers = { ...extra };
+  const token = getToken();
+  if (token) headers.Authorization = `Bearer ${token}`;
+  return headers;
+}
+
 export async function getUploadUrl(filename, contentType) {
   const res = await fetch("/api/upload-url", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: authHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify({ filename, contentType }),
   });
   if (!res.ok)
@@ -27,7 +42,7 @@ export async function uploadFile(file) {
 export async function saveImage(objectKey, originalFilename) {
   const res = await fetch("/api/images", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: authHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify({ objectKey, originalFilename }),
   });
   if (!res.ok)
@@ -37,21 +52,27 @@ export async function saveImage(objectKey, originalFilename) {
 export async function searchImages(q, sort) {
   const params = new URLSearchParams({ q });
   if (sort) params.set("sort", sort);
-  const res = await fetch(`/api/search?${params}`);
+  const res = await fetch(`/api/search?${params}`, {
+    headers: authHeaders(),
+  });
   if (!res.ok) throw new Error((await res.json()).error || "search failed");
   return res.json();
 }
 
 export async function listImages(view) {
   const params = view ? `?view=${view}` : "";
-  const res = await fetch(`/api/images${params}`);
+  const res = await fetch(`/api/images${params}`, {
+    headers: authHeaders(),
+  });
   if (!res.ok)
     throw new Error((await res.json()).error || "failed to load images");
   return res.json();
 }
 
 export async function getImage(objectKey) {
-  const res = await fetch(`/api/images/${encodeURIComponent(objectKey)}`);
+  const res = await fetch(`/api/images/${encodeURIComponent(objectKey)}`, {
+    headers: authHeaders(),
+  });
   if (!res.ok)
     throw new Error((await res.json()).error || "failed to load image");
   return res.json();
@@ -60,7 +81,7 @@ export async function getImage(objectKey) {
 export async function updateImage(objectKey, patch) {
   const res = await fetch(`/api/images/${encodeURIComponent(objectKey)}`, {
     method: "PATCH",
-    headers: { "Content-Type": "application/json" },
+    headers: authHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify(patch),
   });
   if (!res.ok)
@@ -71,6 +92,7 @@ export async function updateImage(objectKey, patch) {
 export async function deleteImage(objectKey) {
   const res = await fetch(`/api/images/${encodeURIComponent(objectKey)}`, {
     method: "DELETE",
+    headers: authHeaders(),
   });
   if (!res.ok)
     throw new Error((await res.json()).error || "failed to delete image");
@@ -79,7 +101,7 @@ export async function deleteImage(objectKey) {
 export async function tagImage(payload) {
   const res = await fetch("/api/images/tag", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: authHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify(payload),
   });
   if (!res.ok) throw new Error((await res.json()).error || "AI tagging failed");

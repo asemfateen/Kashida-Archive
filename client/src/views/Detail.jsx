@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import { tagImage, updateImage, deleteImage } from "../api.js";
 import { collections } from "../store.js";
 import { mergeTags } from "../tags.js";
-import Avatar from "../components/Avatar.jsx";
 
 const DEFAULT_PROMPT = "Give me 5 descriptive keywords for this image.";
 
@@ -240,42 +239,6 @@ export default function Detail({
   };
   return (
     <>
-      {/* TopNavBar */}
-      <nav className="bg-surface-container-lowest border-b border-outline-variant flex justify-between items-center w-full px-margin-page py-unit h-16 z-50">
-        <div className="flex items-center gap-gutter">
-          <span className="font-headline-md text-headline-md text-primary">
-            Kashida Archive
-          </span>
-          <div className="ml-8 flex items-center bg-surface-container-low rounded-lg border border-outline-variant px-3 py-1.5 focus-within:bg-surface-container-lowest focus-within:border-tertiary-container transition-colors">
-            <span
-              className="material-symbols-outlined text-on-surface-variant mr-2"
-              style={{ fontSize: "20px" }}
-            >
-              search
-            </span>
-            <input
-              className="bg-transparent border-none outline-none text-body-sm text-on-surface w-64 placeholder-on-surface-variant focus:ring-0 p-0"
-              placeholder="Search assets... (Cmd+K)"
-              type="text"
-            />
-          </div>
-        </div>
-        <div className="flex items-center gap-gutter">
-          <div className="flex gap-4">
-            <button className="text-on-surface-variant hover:bg-surface-container transition-colors p-2 rounded-full flex items-center justify-center scale-95 active:opacity-80 transition-transform">
-              <span className="material-symbols-outlined">notifications</span>
-            </button>
-            <button className="text-on-surface-variant hover:bg-surface-container transition-colors p-2 rounded-full flex items-center justify-center scale-95 active:opacity-80 transition-transform">
-              <span className="material-symbols-outlined">settings</span>
-            </button>
-          </div>
-          <button className="bg-tertiary text-on-tertiary font-label-caps text-label-caps px-4 py-2 rounded hover:bg-tertiary-container transition-colors">
-            Upload
-          </button>
-          <Avatar />
-        </div>
-      </nav>
-
       <div className="flex flex-1 overflow-hidden">
         {/* Main Content Canvas */}
         <main className="flex-1 bg-surface-bright flex flex-col relative">

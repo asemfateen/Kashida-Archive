@@ -46,7 +46,11 @@ const distExists = existsSync(
 );
 
 test("production boot (Railway parity): healthy DB — migration, SPA and API all live", async () => {
-  const { child, port } = startServer();
+  const { child, port } = startServer({
+    ADMIN_USER: "admin",
+    ADMIN_PASS: "s3cret",
+    JWT_SECRET: "boot-test-secret",
+  });
   try {
     const base = `http://127.0.0.1:${port}`;
     const health = await waitFor(`${base}/api/health`);
@@ -55,7 +59,19 @@ test("production boot (Railway parity): healthy DB — migration, SPA and API al
     assert.equal(hb.ok, true);
     assert.equal(hb.db, true);
 
-    const list = await fetch(`${base}/api/images?view=all`);
+    // The API is behind admin auth; log in to get a token.
+    const login = await fetch(`${base}/api/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: "admin", password: "s3cret" }),
+    });
+    assert.equal(login.status, 200);
+    const { token } = await login.json();
+    assert.ok(typeof token === "string" && token.length > 10);
+
+    const list = await fetch(`${base}/api/images?view=all`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
     assert.equal(list.status, 200);
     assert.ok(Array.isArray(await list.json()));
 

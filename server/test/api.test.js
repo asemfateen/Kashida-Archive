@@ -6,6 +6,7 @@ import pool from "../src/db.js";
 const TEST_PREFIX = `test/${Date.now()}`;
 let server;
 let base;
+let token;
 
 // The suite asserts the unconfigured-server responses (R2/Gemini 500s), so it
 // must be immune to the calling environment's real creds. Save and clear the
@@ -25,7 +26,10 @@ const key = (name) => `${TEST_PREFIX}/${name}.jpg`;
 
 const j = async (path, opts) => {
   const res = await fetch(`${base}${path}`, {
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
     ...opts,
   });
   let body = null;
@@ -46,6 +50,14 @@ before(async () => {
   server = app.listen(0);
   await new Promise((r) => server.once("listening", r));
   base = `http://127.0.0.1:${server.address().port}`;
+  const login = await fetch(`${base}/api/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username: "admin", password: "admin" }),
+  });
+  assert.equal(login.status, 200, "dev creds admin/admin must log in");
+  token = (await login.json()).token;
+  assert.ok(typeof token === "string" && token.length > 10);
 });
 
 after(async () => {
@@ -67,6 +79,47 @@ test("GET /api/health returns ok", async () => {
   assert.equal(body.ok, true);
   assert.equal(body.service, "kashida-archive");
   assert.equal(body.db, true);
+});
+
+test("POST /api/auth/login rejects bad creds and issues a token for good ones", async () => {
+  const bad = await fetch(`${base}/api/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username: "admin", password: "nope" }),
+  });
+  assert.equal(bad.status, 401);
+
+  const missing = await fetch(`${base}/api/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({}),
+  });
+  assert.equal(missing.status, 401);
+
+  const good = await fetch(`${base}/api/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username: "admin", password: "admin" }),
+  });
+  assert.equal(good.status, 200);
+  const body = await good.json();
+  assert.equal(body.user.username, "admin");
+  assert.ok(typeof body.token === "string" && body.token.length > 10);
+});
+
+test("protected routes 401 without a token and reject forged tokens", async () => {
+  const anon = await fetch(`${base}/api/images`);
+  assert.equal(anon.status, 401);
+
+  const forged = await fetch(`${base}/api/search?q=protest`, {
+    headers: { Authorization: "Bearer not.a.jwt" },
+  });
+  assert.equal(forged.status, 401);
+
+  const ok = await fetch(`${base}/api/search?q=protest`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  assert.equal(ok.status, 200);
 });
 
 test("POST /api/images rejects missing fields", async () => {
@@ -265,6 +318,19 @@ test("GET /api/search sort=newest and sort=oldest order by created_at", async ()
   assert.deepEqual(
     pick(newest.body).map((i) => i.object_key),
     [...pick(oldest.body).map((i) => i.object_key)].reverse(),
+  );
+});
+
+test("GET /api/search is fuzzy: typos still match (pg_trgm)", async () => {
+  const { status, body } = await j("/api/search?q=protestt");
+  assert.equal(status, 200);
+  assert.ok(
+    body.some((i) => i.object_key === key("rank1")),
+    "one-char typo 'protestt' must still find tags containing 'protest'",
+  );
+  assert.ok(
+    body.some((i) => i.object_key === key("rank2")),
+    "one-char typo 'protestt' must still find tags containing 'protest'",
   );
 });
 

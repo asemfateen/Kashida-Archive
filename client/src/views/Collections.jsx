@@ -1,14 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { collections } from "../store.js";
 import { getImage } from "../api.js";
-import Avatar from "../components/Avatar.jsx";
 
 export default function Collections({
   onBack,
   onOpenList,
   onUpload,
   onSettings,
-  onSearchView,
   pendingBatch,
   onConsumedBatch,
 }) {
@@ -91,52 +89,43 @@ export default function Collections({
 
   return (
     <>
-      <header className="bg-surface-container-lowest border-b border-outline-variant px-margin-page py-unit h-16 z-50 flex justify-between items-center shrink-0">
-        <div className="flex items-center gap-6">
-          <button
-            onClick={onBack}
-            className="text-on-surface-variant hover:text-primary transition-colors flex items-center gap-1"
-          >
-            <span className="material-symbols-outlined">arrow_back</span>
-            <span className="font-label-caps text-label-caps">Library</span>
-          </button>
-          <div>
-            <h1 className="font-headline-md text-headline-md text-primary tracking-tight font-bold">
-              Collections
-            </h1>
-            <p className="font-body-sm text-body-sm text-on-surface-variant -mt-1">
-              Organize assets for stories, shoots and assignments
-            </p>
-          </div>
-        </div>
-        <div className="flex items-center gap-4">
-          <button
-            onClick={onSearchView}
-            className="text-on-surface-variant hover:bg-surface-container transition-colors p-2 rounded-full"
-            title="Advanced Search"
-          >
-            <span className="material-symbols-outlined">tune</span>
-          </button>
-          <button
-            onClick={onSettings}
-            className="text-on-surface-variant hover:bg-surface-container transition-colors p-2 rounded-full"
-            title="Settings"
-          >
-            <span className="material-symbols-outlined">settings</span>
-          </button>
-          <button
-            onClick={onUpload}
-            className="bg-tertiary text-on-tertiary px-4 py-2 rounded-lg font-title-sm text-title-sm hover:bg-tertiary-container transition-colors flex items-center gap-2"
-          >
-            <span className="material-symbols-outlined">upload</span>
-            Upload
-          </button>
-          <Avatar />
-        </div>
-      </header>
-
       <div className="flex-1 overflow-y-auto p-margin-page bg-background">
         <div className="max-w-5xl mx-auto flex flex-col gap-8">
+          <div className="flex items-center justify-between flex-wrap gap-4">
+            <div className="flex items-center gap-6">
+              <button
+                onClick={onBack}
+                className="text-on-surface-variant hover:text-primary transition-colors flex items-center gap-1"
+              >
+                <span className="material-symbols-outlined">arrow_back</span>
+                <span className="font-label-caps text-label-caps">Library</span>
+              </button>
+              <div>
+                <h1 className="font-headline-md text-headline-md text-primary tracking-tight font-bold">
+                  Collections
+                </h1>
+                <p className="font-body-sm text-body-sm text-on-surface-variant -mt-1">
+                  Organize assets for stories, shoots and assignments
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-4">
+              <button
+                onClick={onSettings}
+                className="text-on-surface-variant hover:bg-surface-container transition-colors p-2 rounded-full"
+                title="Settings"
+              >
+                <span className="material-symbols-outlined">settings</span>
+              </button>
+              <button
+                onClick={onUpload}
+                className="bg-tertiary text-on-tertiary px-4 py-2 rounded-lg font-title-sm text-title-sm hover:bg-tertiary-container transition-colors flex items-center gap-2"
+              >
+                <span className="material-symbols-outlined">upload</span>
+                Upload
+              </button>
+            </div>
+          </div>
           {/* Pending batch banner */}
           {pendingBatch && pendingBatch.length > 0 && (
             <div className="flex items-center justify-between gap-4 bg-primary-container border border-primary rounded-xl p-4">

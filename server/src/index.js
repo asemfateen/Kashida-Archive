@@ -11,6 +11,13 @@ import pool from "./db.js";
 import { ai, GEMINI_MODEL, isGeminiConfigured } from "./gemini.js";
 import { parseTags, mergeTags } from "./tagParser.js";
 import initDb from "./initDb.js";
+import {
+  ADMIN_USER,
+  isAuthConfigured,
+  checkCredentials,
+  signToken,
+  requireAuth,
+} from "./auth.js";
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -52,7 +59,7 @@ function makeRateLimit({ windowMs, max }) {
     }
   }, windowMs);
   sweep.unref();
-  return (req, res, next) => {
+  const limiter = (req, res, next) => {
     const now = Date.now();
     const rec = hits.get(req.ip) || { count: 0, reset: now + windowMs };
     if (now > rec.reset) {
@@ -66,13 +73,31 @@ function makeRateLimit({ windowMs, max }) {
     hits.set(req.ip, rec);
     next();
   };
+  // Tests reset limiter state between cases so they don't leak into each other.
+  limiter.reset = () => hits.clear();
+  return limiter;
 }
 const RATE_UPLOAD = makeRateLimit({ windowMs: 60_000, max: 120 });
 const RATE_TAG = makeRateLimit({ windowMs: 60_000, max: 60 });
-
+// Tests reset these between cases to avoid cross-test leaks.
+export { RATE_UPLOAD, RATE_TAG };
 app.get("/api/health", async (req, res) => {
   await dbInit;
   res.json({ ok: true, service: "kashida-archive", db: dbReady });
+});
+
+app.post("/api/auth/login", async (req, res) => {
+  if (!isAuthConfigured()) {
+    return res.status(500).json({
+      error:
+        "auth is not configured — set ADMIN_USER, ADMIN_PASS and JWT_SECRET in production",
+    });
+  }
+  const { username, password } = req.body || {};
+  if (!checkCredentials(username, password)) {
+    return res.status(401).json({ error: "invalid username or password" });
+  }
+  res.json({ token: signToken(username), user: { username: ADMIN_USER } });
 });
 
 app.use("/api", async (req, res, next) => {
@@ -83,6 +108,15 @@ app.use("/api", async (req, res, next) => {
     error:
       "database not ready — check DATABASE_URL or the server logs for the connection error",
   });
+});
+
+// Everything under /api is authenticated except health, login and the raw
+// image serve endpoint (images load in <img> tags which can't carry headers).
+app.use("/api", (req, res, next) => {
+  if (req.path === "/health" || req.path === "/auth/login") return next();
+  if (req.path === "/images/serve" || req.path.startsWith("/images/serve/"))
+    return next();
+  return requireAuth(req, res, next);
 });
 
 const ALLOWED_EXTENSIONS = /\.(jpg|jpeg|png|webp|gif|heic|tiff|raw)$/i;
@@ -360,7 +394,7 @@ app.get("/api/search", async (req, res) => {
     return res.status(400).json({ error: "q query parameter is required" });
   }
 
-  const tsQuery = buildTsQuery(q);
+  const terms = buildTsQuery(q);
   const publicBase = (process.env.R2_PUBLIC_BASE_URL || "").replace(/\/+$/, "");
   const sort = req.query.sort || "rank";
   const orderBy =
@@ -370,41 +404,65 @@ app.get("/api/search", async (req, res) => {
         ? "created_at ASC"
         : "rank DESC, created_at DESC";
 
+  // Composite rank: full-text rank and trigram word_similarity both feed the
+  // ordering. ts_rank() returns float4; word_similarity() float8, so cast the
+  // ts_rank to keep GREATEST() type-safe. similarity() is kept as a second
+  // trigram signal for short/case-insensitive tag hunks.
+  const RANK_SQL = `GREATEST(
+    ts_rank(search_vector, to_tsquery('simple', $1))::float8,
+    word_similarity(tags, $2),
+    similarity(tags, $2)
+  ) AS rank`;
+  // Fuzzy path: match when a tag is word-similar to the query with a relaxed
+  // 0.25 threshold (default is 0.3, which misses 1-char typos like
+  // "protestt" → "protest" at 0.29). Unrelated terms score ~0, so the floor
+  // still keeps noise out.
+  const WHERE_SQL = `(search_vector @@ to_tsquery('simple', $1) OR tags ILIKE $3 OR word_similarity(tags, $2) >= 0.25)
+    AND deleted = false`;
+
   try {
-    let rows;
-    if (tsQuery) {
-      const result = await pool.query(
-        `SELECT id, object_key, original_filename, tags, favorite, created_at,
-                ts_rank(search_vector, to_tsquery('simple', $1)) AS rank
-         FROM images
-         WHERE (search_vector @@ to_tsquery('simple', $1) OR tags ILIKE $2)
-           AND deleted = false
-         ORDER BY ${orderBy}
-         LIMIT ${SEARCH_LIMIT}`,
-        [tsQuery, `%${q}%`],
-      );
-      rows = result.rows;
-    } else {
-      const result = await pool.query(
-        `SELECT id, object_key, original_filename, tags, favorite, created_at,
-                0 AS rank
-         FROM images
-         WHERE tags ILIKE $1
-           AND deleted = false
-         ORDER BY created_at DESC
-         LIMIT ${SEARCH_LIMIT}`,
-        [`%${q}%`],
-      );
-      rows = result.rows;
-    }
+    const result = await pool.query(
+      `SELECT id, object_key, original_filename, tags, favorite, created_at,
+              ${RANK_SQL}
+       FROM images
+       WHERE ${WHERE_SQL}
+       ORDER BY ${orderBy}
+       LIMIT ${SEARCH_LIMIT}`,
+      [terms, q, `%${q}%`],
+    );
 
     res.json(
-      rows.map((row) => ({
+      result.rows.map((row) => ({
         ...row,
         url: publicUrl(publicBase, row.object_key),
       })),
     );
   } catch (err) {
+    // If pg_trgm isn't available (e.g. a managed DB without CREATE EXTENSION
+    // rights) fall back to the previous full-text query so search still works.
+    if (err?.code === "42883" || /pg_trgm|operator.*\?/i.test(err.message)) {
+      try {
+        const result = await pool.query(
+          `SELECT id, object_key, original_filename, tags, favorite, created_at,
+                  ts_rank(search_vector, to_tsquery('simple', $1)) AS rank
+           FROM images
+           WHERE (search_vector @@ to_tsquery('simple', $1) OR tags ILIKE $2)
+             AND deleted = false
+           ORDER BY ${orderBy}
+           LIMIT ${SEARCH_LIMIT}`,
+          [terms, `%${q}%`],
+        );
+        return res.json(
+          result.rows.map((row) => ({
+            ...row,
+            url: publicUrl(publicBase, row.object_key),
+          })),
+        );
+      } catch (fallbackErr) {
+        console.error("Search fallback failed:", fallbackErr.message);
+        return res.status(500).json({ error: "search failed" });
+      }
+    }
     console.error("Search failed:", err.message);
     res.status(500).json({ error: "search failed" });
   }

@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { collections, savedSearches, feedback } from "../store.js";
-import Avatar from "../components/Avatar.jsx";
 
 const DEFAULT_PROMPT = "Give me 5 descriptive keywords for this image.";
 
@@ -55,7 +54,10 @@ export default function Settings({ onBack, imageCount }) {
         setStatus({
           check: false,
           ok: false,
-          error: data.db === false ? "Database not ready" : `API error ${res.status}`,
+          error:
+            data.db === false
+              ? "Database not ready"
+              : `API error ${res.status}`,
         });
         return;
       }
@@ -91,24 +93,20 @@ export default function Settings({ onBack, imageCount }) {
 
   return (
     <>
-      <header className="bg-surface-container-lowest border-b border-outline-variant px-margin-page py-unit h-16 z-50 flex justify-between items-center shrink-0">
-        <div className="flex items-center gap-6">
-          <button
-            onClick={onBack}
-            className="text-on-surface-variant hover:text-primary transition-colors flex items-center gap-1"
-          >
-            <span className="material-symbols-outlined">arrow_back</span>
-            <span className="font-label-caps text-label-caps">Library</span>
-          </button>
-          <h1 className="font-headline-md text-headline-md text-primary tracking-tight font-bold">
-            Settings &amp; Help
-          </h1>
-        </div>
-        <Avatar />
-      </header>
-
       <div className="flex-1 overflow-y-auto p-margin-page bg-background">
         <div className="max-w-3xl mx-auto flex flex-col gap-8 pb-16">
+          <div>
+            <button
+              onClick={onBack}
+              className="text-on-surface-variant hover:text-primary transition-colors flex items-center gap-1 mb-3"
+            >
+              <span className="material-symbols-outlined">arrow_back</span>
+              <span className="font-label-caps text-label-caps">Library</span>
+            </button>
+            <h1 className="font-headline-md text-headline-md text-primary tracking-tight font-bold">
+              Settings &amp; Help
+            </h1>
+          </div>
           {/* System Status */}
           <section className="bg-surface-container-lowest border border-outline-variant rounded-xl p-6">
             <h2 className="font-title-sm text-title-sm text-on-surface mb-4">
