@@ -235,6 +235,88 @@ test("GET /api/images?favorites only returns favorited", async () => {
   assert.equal(mine[0].favorite, true);
 });
 
+test("POST /api/images/batch updates multiple rows and validates input", async () => {
+  const k1 = key("batch1");
+  const k2 = key("batch2");
+  await j("/api/images", {
+    method: "POST",
+    body: JSON.stringify({ objectKey: k1, originalFilename: "b1.jpg" }),
+  });
+  await j("/api/images", {
+    method: "POST",
+    body: JSON.stringify({ objectKey: k2, originalFilename: "b2.jpg" }),
+  });
+
+  const ok = await j("/api/images/batch", {
+    method: "POST",
+    body: JSON.stringify({
+      objectKeys: [k1, k2],
+      patch: { tags: "batch test", favorite: true, deleted: true },
+    }),
+  });
+  assert.equal(ok.status, 200);
+  assert.equal(ok.body.updated, 2);
+
+  const trash = await j("/api/images?view=trash");
+  const inTrash = trash.body.filter((i) => [k1, k2].includes(i.object_key));
+  assert.equal(inTrash.length, 2);
+  assert.ok(inTrash.every((i) => i.tags === "batch test"));
+
+  const empty = await j("/api/images/batch", {
+    method: "POST",
+    body: JSON.stringify({ objectKeys: [k1], patch: {} }),
+  });
+  assert.equal(empty.status, 400);
+
+  const noKeys = await j("/api/images/batch", {
+    method: "POST",
+    body: JSON.stringify({ objectKeys: [], patch: { deleted: true } }),
+  });
+  assert.equal(noKeys.status, 400);
+
+  const badType = await j("/api/images/batch", {
+    method: "POST",
+    body: JSON.stringify({ objectKeys: "nope", patch: {} }),
+  });
+  assert.equal(badType.status, 400);
+});
+
+test("POST /api/images/batch-delete hard-deletes rows and validates input", async () => {
+  const k1 = key("batchdel1");
+  const k2 = key("batchdel2");
+  await j("/api/images", {
+    method: "POST",
+    body: JSON.stringify({ objectKey: k1, originalFilename: "d1.jpg" }),
+  });
+  await j("/api/images", {
+    method: "POST",
+    body: JSON.stringify({ objectKey: k2, originalFilename: "d2.jpg" }),
+  });
+
+  const del = await j("/api/images/batch-delete", {
+    method: "POST",
+    body: JSON.stringify({ objectKeys: [k1, k2] }),
+  });
+  assert.equal(del.status, 200);
+  assert.equal(del.body.deleted, 2);
+
+  const all = await j("/api/images");
+  const remaining = all.body.filter((i) => [k1, k2].includes(i.object_key));
+  assert.equal(remaining.length, 0);
+
+  const noKeys = await j("/api/images/batch-delete", {
+    method: "POST",
+    body: JSON.stringify({ objectKeys: [] }),
+  });
+  assert.equal(noKeys.status, 400);
+
+  const tooMany = await j("/api/images/batch-delete", {
+    method: "POST",
+    body: JSON.stringify({ objectKeys: Array(501).fill(key("x")) }),
+  });
+  assert.equal(tooMany.status, 400);
+});
+
 test("DELETE soft-deletes, trash view shows it, PATCH restores", async () => {
   await j("/api/images", {
     method: "POST",

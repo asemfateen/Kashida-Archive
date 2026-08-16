@@ -112,6 +112,28 @@ export async function emptyTrash() {
     throw new Error((await res.json()).error || "failed to empty trash");
   return res.json();
 }
+export async function batchUpdate(objectKeys, patch) {
+  const res = await fetch("/api/images/batch", {
+    method: "POST",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({ objectKeys, patch }),
+  });
+  if (!res.ok)
+    throw new Error((await res.json()).error || "failed to update images");
+  return res.json();
+}
+
+export async function batchDelete(objectKeys) {
+  const res = await fetch("/api/images/batch-delete", {
+    method: "POST",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({ objectKeys }),
+  });
+  if (!res.ok)
+    throw new Error((await res.json()).error || "failed to delete images");
+  return res.json();
+}
+
 export async function tagImage(payload) {
   const res = await fetch("/api/images/tag", {
     method: "POST",

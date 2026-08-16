@@ -394,6 +394,99 @@ app.get("/api/images/thumb/*", async (req, res) => {
   }
 });
 
+function validateKeyList(value) {
+  if (!Array.isArray(value) || value.length === 0 || value.length > 500) {
+    return false;
+  }
+  return value.every(
+    (k) =>
+      typeof k === "string" &&
+      k.length > 0 &&
+      k.length <= 512 &&
+      !k.includes("\0"),
+  );
+}
+
+// Batch update for multi-select actions (trash/restore/favorite). Mirrors the
+// single-image PATCH but over an object_key set.
+app.post("/api/images/batch", async (req, res) => {
+  const { objectKeys, patch } = req.body || {};
+  if (!validateKeyList(objectKeys)) {
+    return res
+      .status(400)
+      .json({ error: "objectKeys must be a non-empty list" });
+  }
+  const { tags, favorite, deleted } = patch || {};
+  const sets = [];
+  const values = [];
+  if (typeof tags === "string") {
+    if (tags.length > 2000 || tags.includes("\0")) {
+      return res.status(400).json({ error: "invalid tags" });
+    }
+    values.push(tags);
+    sets.push(`tags = $${values.length}`);
+  }
+  if (typeof favorite === "boolean") {
+    values.push(favorite);
+    sets.push(`favorite = $${values.length}`);
+  }
+  if (typeof deleted === "boolean") {
+    values.push(deleted);
+    sets.push(`deleted = $${values.length}`);
+  }
+  if (sets.length === 0) {
+    return res.status(400).json({ error: "nothing to update" });
+  }
+  values.push(objectKeys);
+  try {
+    const { rows } = await pool.query(
+      `UPDATE images SET ${sets.join(", ")} WHERE object_key = ANY($${values.length})
+       RETURNING id, object_key, original_filename, tags, favorite, deleted, created_at`,
+      values,
+    );
+    res.json({ updated: rows.length });
+  } catch (err) {
+    console.error("Batch update failed:", err.message);
+    res.status(500).json({ error: "failed to update images" });
+  }
+});
+
+// Hard-delete a set of images (from trash): removes DB rows and their R2
+// objects. R2 cleanup is best-effort so a partial failure never strands rows.
+app.post("/api/images/batch-delete", async (req, res) => {
+  const { objectKeys } = req.body || {};
+  if (!validateKeyList(objectKeys)) {
+    return res
+      .status(400)
+      .json({ error: "objectKeys must be a non-empty list" });
+  }
+  try {
+    const { rows } = await pool.query(
+      `DELETE FROM images WHERE object_key = ANY($1) RETURNING object_key`,
+      [objectKeys],
+    );
+    if (isR2Configured()) {
+      for (const row of rows) {
+        try {
+          await r2.send(
+            new DeleteObjectCommand({ Bucket: R2_BUCKET, Key: row.object_key }),
+          );
+        } catch (r2Err) {
+          console.error(
+            "R2 object delete failed:",
+            row.object_key,
+            r2Err.message,
+          );
+        }
+      }
+    }
+    res.json({ deleted: rows.length });
+  } catch (err) {
+    console.error("Batch delete failed:", err.message);
+    res.status(500).json({ error: "failed to delete images" });
+  }
+});
+
 app.get("/api/images/:objectKey", async (req, res) => {
   const { objectKey } = req.params;
   if (objectKey.includes("\0")) {

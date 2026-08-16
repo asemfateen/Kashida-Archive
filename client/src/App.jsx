@@ -380,6 +380,10 @@ function Shell() {
                 }
                 onDeleteForever={deleteForever}
                 onEmptyTrash={emptyTrashList}
+                onChanged={() => {
+                  clearCaches();
+                  loadImages(filter);
+                }}
               />
             )}
             {view === "upload" && (

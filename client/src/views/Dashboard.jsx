@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { searchImages } from "../api.js";
+import { batchDelete, batchUpdate, searchImages } from "../api.js";
 
 export default function Dashboard({
   images,
@@ -18,14 +18,54 @@ export default function Dashboard({
   onRestore,
   onDeleteForever,
   onEmptyTrash,
+  onChanged,
 }) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState(null);
   const [searching, setSearching] = useState(false);
   const [quickTag, setQuickTag] = useState("");
   const [toast, setToast] = useState(null);
+  const [selectMode, setSelectMode] = useState(false);
+  const [selected, setSelected] = useState(() => new Set());
   const searchRef = useRef(null);
   const searchIdRef = useRef(0);
+
+  const toggleSelect = (key) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  const clearSelection = () => {
+    setSelected(new Set());
+    setSelectMode(false);
+  };
+
+  const runBatch = async (action) => {
+    const keys = [...selected];
+    if (keys.length === 0) return;
+    if (
+      action === "deleteForever" &&
+      !window.confirm(
+        `Permanently delete ${keys.length} photo${keys.length === 1 ? "" : "s"}? This cannot be undone.`,
+      )
+    )
+      return;
+    try {
+      if (action === "trash") await batchUpdate(keys, { deleted: true });
+      else if (action === "restore")
+        await batchUpdate(keys, { deleted: false });
+      else if (action === "deleteForever") await batchDelete(keys);
+      clearSelection();
+      showToast(`Moved ${keys.length} photo${keys.length === 1 ? "" : "s"}`);
+      onChanged?.();
+    } catch {
+      showToast("Could not update selection");
+    }
+  };
 
   const showToast = (msg) => {
     setToast(msg);
@@ -131,6 +171,8 @@ export default function Dashboard({
     setResults(null);
     setQuery("");
     setSearching(false);
+    setSelected(new Set());
+    setSelectMode(false);
   }, [activeFilter]);
 
   // Run the search coming from the taskbar (/?q=...) inside the home grid.
@@ -175,6 +217,58 @@ export default function Dashboard({
         <main className="flex-1 bg-background overflow-y-auto flex flex-col relative">
           {/* Asset Grid */}
           <div className="p-margin-page pb-24">
+            {selectMode ? (
+              <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
+                <p className="font-body-md text-body-md text-on-surface">
+                  <span className="font-label-caps text-label-caps text-primary">
+                    {selected.size} selected
+                  </span>
+                </p>
+                <div className="flex items-center gap-2 flex-wrap">
+                  {activeFilter === "trash" ? (
+                    <>
+                      <button
+                        onClick={() => runBatch("restore")}
+                        className="bg-surface-container-high text-primary font-label-caps text-label-caps px-4 py-2 rounded-lg hover:bg-surface-variant transition-colors border border-outline-variant"
+                      >
+                        Restore
+                      </button>
+                      <button
+                        onClick={() => runBatch("deleteForever")}
+                        className="bg-error-container text-on-error-container font-label-caps text-label-caps px-4 py-2 rounded-lg hover:bg-error hover:text-on-error transition-colors"
+                      >
+                        Delete forever
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      onClick={() => runBatch("trash")}
+                      className="bg-error-container text-on-error-container font-label-caps text-label-caps px-4 py-2 rounded-lg hover:bg-error hover:text-on-error transition-colors"
+                    >
+                      Move to Trash
+                    </button>
+                  )}
+                  <button
+                    onClick={clearSelection}
+                    className="bg-surface-container-high text-on-surface-variant font-label-caps text-label-caps px-4 py-2 rounded-lg hover:bg-surface-variant transition-colors border border-outline-variant"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center justify-between mb-4">
+                <button
+                  onClick={() => setSelectMode(true)}
+                  className="bg-surface-container-high text-primary font-label-caps text-label-caps px-4 py-2 rounded-lg hover:bg-surface-variant transition-colors border border-outline-variant"
+                >
+                  <span className="material-symbols-outlined text-[18px] align-middle mr-1">
+                    check_box
+                  </span>
+                  Select
+                </button>
+              </div>
+            )}
             {activeFilter === "trash" && galleryItems.length > 0 && (
               <div className="flex items-center justify-between mb-4">
                 <p className="font-body-sm text-body-sm text-on-surface-variant">
@@ -256,6 +350,10 @@ export default function Dashboard({
                   <div
                     key={item.id || item.object_key}
                     onClick={() => {
+                      if (selectMode) {
+                        toggleSelect(item.object_key);
+                        return;
+                      }
                       if (results !== null) {
                         onOpenList(
                           galleryItems.map(normalize),
@@ -265,7 +363,11 @@ export default function Dashboard({
                         onOpenImage(item);
                       }
                     }}
-                    className="masonry-item relative group photo-card rounded bg-surface-container-lowest border border-outline-variant overflow-hidden shadow-[0px_10px_15px_rgba(0,0,0,0.05)] cursor-pointer"
+                    className={`masonry-item relative group photo-card rounded bg-surface-container-lowest border border-outline-variant overflow-hidden shadow-[0px_10px_15px_rgba(0,0,0,0.05)] cursor-pointer ${
+                      selected.has(item.object_key)
+                        ? "ring-2 ring-tertiary"
+                        : ""
+                    }`}
                   >
                     <img
                       className="w-full object-cover"
@@ -282,8 +384,34 @@ export default function Dashboard({
                       }}
                     />
                     <div className="absolute inset-0 border-[3px] border-transparent group-hover:border-tertiary-container transition-colors z-10 pointer-events-none"></div>
+                    {selectMode && (
+                      <div className="absolute top-2 left-2 z-30 w-7 h-7 rounded flex items-center justify-center bg-surface-container-lowest/90 backdrop-blur border border-outline-variant pointer-events-none">
+                        <span
+                          className="material-symbols-outlined text-[18px]"
+                          style={
+                            selected.has(item.object_key)
+                              ? {
+                                  fontVariationSettings: "'FILL' 1",
+                                  color: "var(--tertiary, #22d3ee)",
+                                }
+                              : { color: "var(--on-surface-variant, #94a3b8)" }
+                          }
+                        >
+                          {selected.has(item.object_key)
+                            ? "check_box"
+                            : "check_box_outline_blank"}
+                        </span>
+                      </div>
+                    )}
                     {/* Actions Overlay */}
-                    <div className="photo-actions absolute top-2 left-2 right-2 flex justify-between opacity-0 transition-opacity z-20">
+                    <div
+                      className="photo-actions absolute top-2 left-2 right-2 flex justify-between opacity-0 transition-opacity z-20"
+                      style={
+                        selectMode
+                          ? { opacity: 0, pointerEvents: "none" }
+                          : undefined
+                      }
+                    >
                       {isTrash ? (
                         <div className="flex gap-2">
                           <button
