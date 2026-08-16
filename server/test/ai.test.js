@@ -293,7 +293,7 @@ test("retry and cancel-all requeue/cancel jobs, delete removes finished", async 
   assert.equal(cancelAll.body.canceled, beforeCancel.queue.queued);
 });
 
-test("POST /api/ai/jobs/:id/retry re-queues a failed job", async () => {
+test("POST /api/ai/jobs/:id/retry re-queues a failed job and resets attempts", async () => {
   const k = await makeImage("retryme");
   const { body: created } = await j("/api/ai/jobs", {
     method: "POST",
@@ -301,11 +301,13 @@ test("POST /api/ai/jobs/:id/retry re-queues a failed job", async () => {
   });
   const id = created.jobs[0].id;
   await setJobStatus(k, "failed");
+  await pool.query(`UPDATE ai_jobs SET attempts = 4 WHERE id = $1`, [id]);
 
   const retry = await j(`/api/ai/jobs/${id}/retry`, { method: "POST" });
   assert.equal(retry.status, 200);
   assert.equal(retry.body.status, "queued");
   assert.equal(retry.body.error, "");
+  assert.equal(retry.body.attempts, 0);
 });
 
 test("DELETE /api/ai/jobs/:id only removes finished jobs", async () => {

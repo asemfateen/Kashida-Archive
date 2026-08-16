@@ -959,7 +959,8 @@ app.patch("/api/ai/jobs/:id", async (req, res) => {
 app.post("/api/ai/jobs/:id/retry", async (req, res) => {
   try {
     const { rows } = await pool.query(
-      `UPDATE ai_jobs SET status = 'queued', error = '', finished_at = NULL
+      `UPDATE ai_jobs
+       SET status = 'queued', attempts = 0, error = '', finished_at = NULL
        WHERE id = $1 AND status IN ('failed', 'canceled')
        RETURNING id, object_key, prompt, status, attempts, result_tags, error, created_at`,
       [req.params.id],
@@ -977,7 +978,8 @@ app.post("/api/ai/jobs/:id/retry", async (req, res) => {
 app.post("/api/ai/jobs/retry-failed", async (_req, res) => {
   try {
     const { rowCount } = await pool.query(
-      `UPDATE ai_jobs SET status = 'queued', error = '', finished_at = NULL
+      `UPDATE ai_jobs
+       SET status = 'queued', attempts = 0, error = '', finished_at = NULL
        WHERE status = 'failed'`,
     );
     res.json({ requeued: rowCount });
