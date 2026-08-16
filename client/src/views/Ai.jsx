@@ -109,9 +109,7 @@ function StatusBanner({ status }) {
     tone = "limited";
     icon = "hourglass_top";
     title = `Rate-limited until ${fmtTime(quota.rate_limited_until)}`;
-    detail = quota.last_error
-      ? quota.last_error
-      : "Gemini asked us to wait before the next request. The queue resumes on its own.";
+    detail = "Gemini hit its limit — the queue pauses and resumes on its own.";
   }
 
   const bannerClass =
