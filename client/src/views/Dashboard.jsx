@@ -1,6 +1,25 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { batchDelete, batchUpdate, searchImages } from "../api.js";
+import {
+  batchDelete,
+  batchUpdate,
+  searchImages,
+  tagImage,
+  updateImage,
+} from "../api.js";
+import { mergeTags } from "../tags.js";
+import { makeThumbnail } from "../thumbnail.js";
+import { pushError } from "../notify.jsx";
+
+const DEFAULT_PROMPT = "Give me 5 descriptive keywords for this image.";
+
+function loadPrompt() {
+  try {
+    return localStorage.getItem("masterPrompt") || DEFAULT_PROMPT;
+  } catch {
+    return DEFAULT_PROMPT;
+  }
+}
 
 export default function Dashboard({
   images,
@@ -22,9 +41,15 @@ export default function Dashboard({
   const [query, setQuery] = useState("");
   const [results, setResults] = useState(null);
   const [searching, setSearching] = useState(false);
+  const [searchError, setSearchError] = useState(null);
   const [toast, setToast] = useState(null);
   const [selectMode, setSelectMode] = useState(false);
   const [selected, setSelected] = useState(() => new Set());
+  const [tagModal, setTagModal] = useState(false);
+  const [manualInput, setManualInput] = useState("");
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiProgress, setAiProgress] = useState(null);
+  const [tagFailures, setTagFailures] = useState([]);
   const [rightCollapsed, setRightCollapsed] = useState(
     () => localStorage.getItem("kashida_right_panel_collapsed") !== "0",
   );
@@ -80,8 +105,8 @@ export default function Dashboard({
       clearSelection();
       showToast(`Moved ${keys.length} photo${keys.length === 1 ? "" : "s"}`);
       onChanged?.();
-    } catch {
-      showToast("Could not update selection");
+    } catch (err) {
+      pushError(err?.message || "Could not update selection");
     }
   };
 
@@ -110,11 +135,18 @@ export default function Dashboard({
     }
     const id = ++searchIdRef.current;
     setSearching(true);
+    setSearchError(null);
     try {
       const res = await searchImages(q);
-      if (id === searchIdRef.current) setResults(res);
-    } catch {
-      if (id === searchIdRef.current) setResults([]);
+      if (id === searchIdRef.current) {
+        setResults(res);
+        setSearchError(null);
+      }
+    } catch (err) {
+      if (id === searchIdRef.current) {
+        setResults([]);
+        setSearchError(err?.message || "Search failed");
+      }
     } finally {
       if (id === searchIdRef.current) setSearching(false);
     }
@@ -136,9 +168,121 @@ export default function Dashboard({
             )
           : prev,
       );
-    } catch {
-      showToast("Could not update favorite");
+    } catch (err) {
+      pushError(err?.message || "Could not update favorite");
     }
+  };
+
+  const selectedItems = () =>
+    galleryItems.filter((i) => selected.has(i.object_key));
+
+  const closeTagModal = () => {
+    if (aiBusy) return;
+    setTagModal(false);
+    setManualInput("");
+    setTagFailures([]);
+  };
+
+  const finishTagging = (okCount, failCount) => {
+    if (failCount > 0) {
+      showToast(
+        `Tagged ${okCount} photo${okCount === 1 ? "" : "s"}, ${failCount} failed`,
+      );
+    } else {
+      showToast(`Tagged ${okCount} photo${okCount === 1 ? "" : "s"}`);
+      clearSelection();
+      setTagModal(false);
+    }
+    onChanged?.();
+  };
+
+  const runAITag = async () => {
+    const items = selectedItems();
+    if (items.length === 0) return;
+    if (
+      !window.confirm(
+        `AI-tag ${items.length} photo${items.length === 1 ? "" : "s"} with Gemini? This may take a moment.`,
+      )
+    )
+      return;
+    const prompt = loadPrompt();
+    setAiBusy(true);
+    setTagFailures([]);
+    let done = 0;
+    let failed = 0;
+    for (const item of items) {
+      const label = item.caption || item.original_filename || item.object_key;
+      try {
+        let thumbnail = null;
+        try {
+          thumbnail = await makeThumbnail(item.thumb || item.src);
+        } catch {
+          thumbnail = null;
+        }
+        const payload = thumbnail
+          ? { objectKey: item.object_key, thumbnail, prompt }
+          : {
+              objectKey: item.object_key,
+              imageUrl: item.thumb || item.src,
+              prompt,
+            };
+        await tagImage(payload);
+      } catch (err) {
+        failed += 1;
+        const msg = err?.message || "AI tagging failed";
+        setTagFailures((prev) => [...prev, { label, message: msg }]);
+        pushError(`${label}: ${msg}`);
+      }
+      done += 1;
+      setAiProgress({ done, total: items.length });
+    }
+    setAiBusy(false);
+    setAiProgress(null);
+    finishTagging(items.length - failed, failed);
+  };
+
+  const parseManualTags = (value) =>
+    value
+      .split(/[\s,]+/)
+      .map((t) => t.trim().replace(/^#/, ""))
+      .filter(Boolean);
+
+  const runManualTag = async () => {
+    const tags = parseManualTags(manualInput);
+    const items = selectedItems();
+    if (items.length === 0) return;
+    if (tags.length === 0) {
+      pushError("Enter at least one tag first");
+      return;
+    }
+    setAiBusy(true);
+    setTagFailures([]);
+    let done = 0;
+    let failed = 0;
+    for (const item of items) {
+      const label = item.caption || item.original_filename || item.object_key;
+      try {
+        const merged = mergeTags(item.tags || "", tags);
+        await updateImage(item.object_key, { tags: merged.join(" ") });
+        done += 1;
+      } catch (err) {
+        failed += 1;
+        const msg = err?.message || "Could not save tags";
+        setTagFailures((prev) => [...prev, { label, message: msg }]);
+        pushError(`${label}: ${msg}`);
+      }
+    }
+    setAiBusy(false);
+    setManualInput("");
+    finishTagging(done, failed);
+  };
+
+  const addQuickTag = (tag) => {
+    setManualInput((prev) => {
+      const existing = parseManualTags(prev);
+      if (existing.includes(tag)) return prev;
+      return existing.length ? `${prev}, ${tag}` : tag;
+    });
   };
 
   const exportJson = () => {
@@ -243,12 +387,27 @@ export default function Dashboard({
                       </button>
                     </>
                   ) : (
-                    <button
-                      onClick={() => runBatch("trash")}
-                      className="bg-error-container text-on-error-container font-label-caps text-label-caps px-4 py-2 rounded-full hover:bg-error hover:text-on-error transition-colors"
-                    >
-                      Move to Trash
-                    </button>
+                    <>
+                      <button
+                        onClick={() => setTagModal(true)}
+                        disabled={aiBusy}
+                        className="bg-midnight-ink text-white font-label-caps text-label-caps px-4 py-2 rounded-full hover:bg-prussian-navy transition-colors disabled:opacity-50"
+                        title="Tag the selected photos with AI or manually"
+                      >
+                        <span className="flex items-center gap-1.5">
+                          <span className="material-symbols-outlined text-[18px]">
+                            sell
+                          </span>
+                          Tag
+                        </span>
+                      </button>
+                      <button
+                        onClick={() => runBatch("trash")}
+                        className="bg-error-container text-on-error-container font-label-caps text-label-caps px-4 py-2 rounded-full hover:bg-error hover:text-on-error transition-colors"
+                      >
+                        Move to Trash
+                      </button>
+                    </>
                   )}
                   <button
                     onClick={clearSelection}
@@ -285,6 +444,23 @@ export default function Dashboard({
                   className="bg-error-container text-on-error-container font-label-caps text-label-caps px-4 py-2 rounded-full hover:bg-error hover:text-on-error transition-colors"
                 >
                   Empty Trash
+                </button>
+              </div>
+            )}
+            {searchError && (
+              <div className="flex items-center gap-2 mb-4 bg-error/10 border border-error/30 text-error font-body-sm text-body-sm px-3 py-2 rounded-xl">
+                <span className="material-symbols-outlined text-[16px] shrink-0">
+                  error
+                </span>
+                <span className="flex-1 break-words">{searchError}</span>
+                <button
+                  onClick={() => setSearchError(null)}
+                  className="shrink-0 opacity-70 hover:opacity-100 transition-opacity"
+                  aria-label="Dismiss search error"
+                >
+                  <span className="material-symbols-outlined text-[16px]">
+                    close
+                  </span>
                 </button>
               </div>
             )}
@@ -687,6 +863,121 @@ export default function Dashboard({
           )}
         </aside>
       </div>
+
+      {tagModal && (
+        <div className="fixed inset-0 z-[70] bg-black/30 flex items-center justify-center p-4">
+          <div className="w-full max-w-md bg-white rounded-[2rem] shadow-soft border border-black/5 p-6 flex flex-col gap-5">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-bold text-midnight-ink tracking-tight">
+                Tag {selected.size} photo{selected.size === 1 ? "" : "s"}
+              </h2>
+              <button
+                onClick={closeTagModal}
+                disabled={aiBusy}
+                className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-surface-container-low text-on-surface-variant transition-colors disabled:opacity-40"
+                aria-label="Close tag dialog"
+              >
+                <span className="material-symbols-outlined text-[18px]">
+                  close
+                </span>
+              </button>
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <span className="font-label-caps text-label-caps text-on-surface-variant">
+                AI tagging
+              </span>
+              <button
+                onClick={runAITag}
+                disabled={aiBusy}
+                className="flex items-center justify-center gap-2 bg-midnight-ink text-white px-4 py-2.5 rounded-full text-sm font-medium hover:bg-prussian-navy transition-colors disabled:opacity-60"
+              >
+                {aiBusy && aiProgress ? (
+                  <>
+                    <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
+                    Tagging {aiProgress.done}/{aiProgress.total}...
+                  </>
+                ) : (
+                  <>
+                    <span className="material-symbols-outlined text-[18px]">
+                      auto_awesome
+                    </span>
+                    AI tag {selected.size} selected
+                  </>
+                )}
+              </button>
+              <p className="font-body-sm text-body-sm text-on-surface-variant">
+                Runs Gemini on each photo and merges the results into its tags.
+              </p>
+            </div>
+
+            <div className="h-px bg-black/5"></div>
+
+            <div className="flex flex-col gap-2">
+              <label className="font-label-caps text-label-caps text-on-surface-variant">
+                Manual tags
+              </label>
+              <input
+                value={manualInput}
+                onChange={(e) => setManualInput(e.target.value)}
+                disabled={aiBusy}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    runManualTag();
+                  }
+                }}
+                className="w-full bg-surface-container-low border border-black/5 rounded-xl px-3 py-2.5 text-body-md text-on-surface focus:border-midnight-ink focus:ring-1 focus:ring-midnight-ink outline-none transition-colors disabled:opacity-60"
+                placeholder="e.g. news, breaking, politics"
+              />
+              {recentTags.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {recentTags.map(([tag]) => (
+                    <button
+                      key={tag}
+                      onClick={() => addQuickTag(tag)}
+                      disabled={aiBusy}
+                      className="px-2.5 py-1 rounded-full bg-surface-container-low text-on-surface-variant text-xs font-medium hover:bg-white hover:text-midnight-ink hover:shadow-soft border border-black/5 transition-all disabled:opacity-50"
+                    >
+                      {tag}
+                    </button>
+                  ))}
+                </div>
+              )}
+              <button
+                onClick={runManualTag}
+                disabled={aiBusy}
+                className="flex items-center justify-center gap-2 bg-white border border-black/10 text-midnight-ink px-4 py-2.5 rounded-full text-sm font-medium hover:bg-surface-container-low transition-colors disabled:opacity-60"
+              >
+                <span className="material-symbols-outlined text-[18px]">
+                  sell
+                </span>
+                Add tags to {selected.size} selected
+              </button>
+              <p className="font-body-sm text-body-sm text-on-surface-variant">
+                Tags are merged into each photo — existing tags are kept.
+              </p>
+            </div>
+
+            {tagFailures.length > 0 && (
+              <div className="flex flex-col gap-1.5 bg-error/10 border border-error/30 rounded-2xl p-3 max-h-40 overflow-y-auto">
+                <p className="font-label-caps text-label-caps text-error">
+                  {tagFailures.length} failed
+                </p>
+                {tagFailures.map((f, i) => (
+                  <p
+                    key={i}
+                    className="font-body-sm text-body-sm text-error break-words"
+                  >
+                    <span className="font-semibold">{f.label}:</span>{" "}
+                    {f.message}
+                  </p>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {toast && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[60] bg-on-surface text-surface-container-lowest px-4 py-2 rounded-full font-body-sm text-body-sm shadow-lg">

@@ -13,6 +13,15 @@ function authHeaders(extra = {}) {
   return headers;
 }
 
+async function errMessage(res, fallback) {
+  try {
+    const data = await res.clone().json();
+    return data?.error || fallback;
+  } catch {
+    return `${fallback} (HTTP ${res.status}${res.statusText ? ` ${res.statusText}` : ""})`;
+  }
+}
+
 export async function getUploadUrl(filename, contentType) {
   const res = await fetch("/api/upload-url", {
     method: "POST",
@@ -34,7 +43,10 @@ export async function uploadFile(file) {
     headers: { "Content-Type": file.type || "application/octet-stream" },
     body: file,
   });
-  if (!res.ok) throw new Error("R2 upload failed");
+  if (!res.ok)
+    throw new Error(
+      `R2 upload failed (HTTP ${res.status}${res.statusText ? ` ${res.statusText}` : ""})`,
+    );
   await saveImage(objectKey, file.name);
   return { objectKey };
 }
@@ -45,8 +57,7 @@ export async function saveImage(objectKey, originalFilename) {
     headers: authHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify({ objectKey, originalFilename }),
   });
-  if (!res.ok)
-    throw new Error((await res.json()).error || "failed to save image");
+  if (!res.ok) throw new Error(await errMessage(res, "failed to save image"));
   return res.json();
 }
 export async function searchImages(q, sort) {
@@ -55,7 +66,7 @@ export async function searchImages(q, sort) {
   const res = await fetch(`/api/search?${params}`, {
     headers: authHeaders(),
   });
-  if (!res.ok) throw new Error((await res.json()).error || "search failed");
+  if (!res.ok) throw new Error(await errMessage(res, "search failed"));
   return res.json();
 }
 
@@ -64,8 +75,7 @@ export async function listImages(view) {
   const res = await fetch(`/api/images${params}`, {
     headers: authHeaders(),
   });
-  if (!res.ok)
-    throw new Error((await res.json()).error || "failed to load images");
+  if (!res.ok) throw new Error(await errMessage(res, "failed to load images"));
   return res.json();
 }
 
@@ -73,8 +83,7 @@ export async function getImage(objectKey) {
   const res = await fetch(`/api/images/${encodeURIComponent(objectKey)}`, {
     headers: authHeaders(),
   });
-  if (!res.ok)
-    throw new Error((await res.json()).error || "failed to load image");
+  if (!res.ok) throw new Error(await errMessage(res, "failed to load image"));
   return res.json();
 }
 
@@ -84,8 +93,7 @@ export async function updateImage(objectKey, patch) {
     headers: authHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify(patch),
   });
-  if (!res.ok)
-    throw new Error((await res.json()).error || "failed to update image");
+  if (!res.ok) throw new Error(await errMessage(res, "failed to update image"));
   return res.json();
 }
 
@@ -98,8 +106,7 @@ export async function deleteImage(objectKey, permanent) {
       headers: authHeaders(),
     },
   );
-  if (!res.ok)
-    throw new Error((await res.json()).error || "failed to delete image");
+  if (!res.ok) throw new Error(await errMessage(res, "failed to delete image"));
   return res.json();
 }
 
@@ -108,8 +115,7 @@ export async function emptyTrash() {
     method: "DELETE",
     headers: authHeaders(),
   });
-  if (!res.ok)
-    throw new Error((await res.json()).error || "failed to empty trash");
+  if (!res.ok) throw new Error(await errMessage(res, "failed to empty trash"));
   return res.json();
 }
 export async function batchUpdate(objectKeys, patch) {
@@ -119,7 +125,7 @@ export async function batchUpdate(objectKeys, patch) {
     body: JSON.stringify({ objectKeys, patch }),
   });
   if (!res.ok)
-    throw new Error((await res.json()).error || "failed to update images");
+    throw new Error(await errMessage(res, "failed to update images"));
   return res.json();
 }
 
@@ -130,7 +136,7 @@ export async function batchDelete(objectKeys) {
     body: JSON.stringify({ objectKeys }),
   });
   if (!res.ok)
-    throw new Error((await res.json()).error || "failed to delete images");
+    throw new Error(await errMessage(res, "failed to delete images"));
   return res.json();
 }
 
@@ -140,6 +146,6 @@ export async function tagImage(payload) {
     headers: authHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify(payload),
   });
-  if (!res.ok) throw new Error((await res.json()).error || "AI tagging failed");
+  if (!res.ok) throw new Error(await errMessage(res, "AI tagging failed"));
   return res.json();
 }

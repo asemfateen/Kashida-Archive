@@ -875,7 +875,15 @@ app.post("/api/images/tag", RATE_TAG, async (req, res) => {
     res.json({ objectKey, tags, image: rows[0] });
   } catch (err) {
     console.error("AI tagging failed:", err.message);
-    res.status(500).json({ error: "AI tagging failed" });
+    const raw = String(err?.message || "AI tagging failed");
+    const status =
+      err?.status && Number.isInteger(err.status) && err.status >= 400
+        ? err.status
+        : 500;
+    res.status(status).json({
+      error: raw.slice(0, 300) || "AI tagging failed",
+      retryable: status >= 429 || /busy|high demand|overloaded|rate/i.test(raw),
+    });
   }
 });
 

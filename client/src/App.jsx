@@ -26,6 +26,7 @@ import {
   listImages,
   updateImage,
 } from "./api.js";
+import { ErrorToaster, pushError } from "./notify.jsx";
 
 const CACHE_PREFIX = "kashida_cache_";
 const cacheKey = (view) => `${CACHE_PREFIX}${view}`;
@@ -255,7 +256,7 @@ function Shell() {
       removeFromList(objectKey);
       dropFromCache(objectKey);
     } catch (err) {
-      console.error("Permanent delete failed:", err);
+      pushError(err?.message || "Permanent delete failed");
     }
   };
 
@@ -266,7 +267,7 @@ function Shell() {
       setDetailList(null);
       clearCaches();
     } catch (err) {
-      console.error("Empty trash failed:", err);
+      pushError(err?.message || "Could not empty trash");
     }
   };
 
@@ -303,7 +304,7 @@ function Shell() {
       })
       .catch((err) => {
         if (cancelled) return;
-        console.error("Failed to load image from URL:", err);
+        pushError(err?.message || "Failed to load image");
         go(detailFrom);
       })
       .finally(() => {
@@ -380,7 +381,7 @@ function Shell() {
                       dropFromCache(objectKey);
                     })
                     .catch((err) => {
-                      console.error("Restore failed:", err);
+                      pushError(err?.message || "Restore failed");
                     })
                 }
                 onDeleteForever={deleteForever}
@@ -414,7 +415,7 @@ function Shell() {
                       go(detailFrom);
                     }
                   } catch (err) {
-                    console.error("Favorite update failed:", err);
+                    pushError(err?.message || "Favorite update failed");
                   }
                 }}
               />
@@ -449,6 +450,7 @@ function Shell() {
           </div>
         </div>
       </div>
+      <ErrorToaster />
     </div>
   );
 }
