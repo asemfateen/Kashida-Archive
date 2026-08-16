@@ -2,10 +2,16 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import Avatar from "./Avatar.jsx";
 
-export default function Taskbar({ onSearch, onSettings, onUpload }) {
+export default function Taskbar({
+  onSearch,
+  onSettings,
+  onUpload,
+  searchQuery = "",
+}) {
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
   const searchRef = useRef(null);
+  const debounceRef = useRef(null);
 
   useEffect(() => {
     const onKey = (e) => {
@@ -18,11 +24,25 @@ export default function Taskbar({ onSearch, onSettings, onUpload }) {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  // Keep the box in sync with the active URL query after navigation (but never
+  // while the user is mid-typing).
+  useEffect(() => {
+    if (document.activeElement === searchRef.current) return;
+    setQuery(searchQuery);
+  }, [searchQuery]);
+
+  const onChange = (value) => {
+    setQuery(value);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      onSearch?.(value.trim());
+    }, 200);
+  };
+
   const submit = (e) => {
     e.preventDefault();
-    const q = query.trim();
-    if (!q) return;
-    onSearch?.(q);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    onSearch?.(query.trim());
   };
 
   return (
@@ -45,7 +65,7 @@ export default function Taskbar({ onSearch, onSettings, onUpload }) {
             <input
               ref={searchRef}
               value={query}
-              onChange={(e) => setQuery(e.target.value)}
+              onChange={(e) => onChange(e.target.value)}
               className="w-full bg-surface-container-low border border-transparent focus:bg-surface-container-lowest focus:border-tertiary-container focus:ring-1 focus:ring-tertiary-container rounded-xl pl-10 pr-24 py-2.5 font-body-md text-body-md text-on-surface transition-colors placeholder-on-surface-variant outline-none"
               placeholder="Search archive... (Cmd+K)"
               type="text"

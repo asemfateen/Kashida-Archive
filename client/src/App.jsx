@@ -175,7 +175,8 @@ function Shell() {
   }, [filter, loadImages]);
 
   const openSearch = (q) => {
-    navigate(`/?q=${encodeURIComponent(q)}`);
+    if (q) navigate(`/?q=${encodeURIComponent(q)}`, { replace: true });
+    else navigate("/", { replace: true });
   };
 
   const openImage = (image) => {
@@ -330,6 +331,7 @@ function Shell() {
         onSearch={openSearch}
         onSettings={() => go(VIEW_PATH.settings)}
         onUpload={() => go(VIEW_PATH.upload)}
+        searchQuery={searchQuery}
       />
       <div className="flex-1 flex flex-col overflow-hidden">
         <div className="flex flex-1 overflow-hidden">
@@ -476,12 +478,18 @@ export default function App() {
 function ProfileShell() {
   const navigate = useNavigate();
   const go = (path) => navigate(path);
+  const [searchParams] = useSearchParams();
+  const searchQuery = searchParams.get("q") || "";
   return (
     <div className="h-screen w-screen flex flex-col overflow-hidden bg-background text-on-surface font-body-md text-body-md">
       <Taskbar
-        onSearch={(q) => navigate(`/?q=${encodeURIComponent(q)}`)}
+        onSearch={(q) => {
+          if (q) navigate(`/?q=${encodeURIComponent(q)}`, { replace: true });
+          else navigate("/", { replace: true });
+        }}
         onSettings={() => go("/settings")}
         onUpload={() => go("/upload")}
+        searchQuery={searchQuery}
       />
       <div className="flex-1 flex flex-col overflow-hidden">
         <div className="flex flex-1 overflow-hidden">

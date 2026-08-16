@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { batchDelete, batchUpdate, searchImages } from "../api.js";
 
 export default function Dashboard({
@@ -29,6 +30,16 @@ export default function Dashboard({
   );
   const searchRef = useRef(null);
   const searchIdRef = useRef(0);
+  const navigate = useNavigate();
+
+  const clearSearch = () => {
+    searchIdRef.current += 1;
+    setResults(null);
+    setQuery("");
+    setSearching(false);
+    navigate("/", { replace: true });
+    onFilter("all");
+  };
 
   const toggleRight = () => {
     setRightCollapsed((prev) => {
@@ -274,6 +285,29 @@ export default function Dashboard({
                 </button>
               </div>
             )}
+            {results !== null && (
+              <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
+                <p className="font-body-sm text-body-sm text-on-surface-variant flex items-center gap-2">
+                  {searching && (
+                    <span className="w-4 h-4 border-2 border-on-surface-variant/30 border-t-on-surface-variant rounded-full animate-spin"></span>
+                  )}
+                  Showing {galleryItems.length} result
+                  {galleryItems.length === 1 ? "" : "s"} for{" "}
+                  <span className="text-on-surface font-semibold">
+                    "{query}"
+                  </span>
+                </p>
+                <button
+                  onClick={clearSearch}
+                  className="flex items-center gap-1 text-on-surface-variant hover:text-error transition-colors font-label-caps text-label-caps"
+                >
+                  <span className="material-symbols-outlined text-[16px]">
+                    close
+                  </span>
+                  Clear
+                </button>
+              </div>
+            )}
             <div className="masonry-grid">
               {loading && (
                 <p className="font-body-md text-body-md text-on-surface-variant col-span-full">
@@ -318,9 +352,7 @@ export default function Dashboard({
                   <button
                     onClick={() => {
                       if (images.length > 0 || results !== null) {
-                        setResults(null);
-                        setQuery("");
-                        onFilter("all");
+                        clearSearch();
                       } else {
                         onUpload();
                       }
