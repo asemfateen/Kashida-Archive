@@ -27,7 +27,11 @@ async function getState(key, fallback) {
       [key],
     );
     if (rows.length === 0) return fallback;
-    return JSON.parse(rows[0].value);
+    const value = rows[0].value;
+    // pg already parses JSONB columns into JS values; only parse when the
+    // driver hands us a string, otherwise JSON.parse(object) throws and the
+    // stored state would silently read back as the fallback every time.
+    return typeof value === "string" ? JSON.parse(value) : value;
   } catch {
     return fallback;
   }
@@ -201,7 +205,9 @@ async function processJob(job) {
     console.error("AI tagging failed:", raw);
     if (isRetryable(err)) {
       await recordRateLimit(err);
-      if (job.attempts >= MAX_ATTEMPTS) {
+      // `job.attempts` is the pre-increment value; this attempt makes it
+      // job.attempts + 1, so fail once that reaches MAX_ATTEMPTS.
+      if (job.attempts + 1 >= MAX_ATTEMPTS) {
         await pool.query(
           `UPDATE ai_jobs SET status = 'failed', error = $1, finished_at = now() WHERE id = $2`,
           [raw, job.id],

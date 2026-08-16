@@ -349,6 +349,15 @@ test("GET/PATCH /api/ai/config reads and updates settings", async () => {
   const status = await j("/api/ai/status");
   assert.equal(status.body.paused, true);
 
+  // Regression: config/quota are stored as JSONB objects, which pg returns
+  // already-parsed. A JSON.parse() round-trip must not drop the persisted
+  // values back to defaults.
+  const reread = await j("/api/ai/config");
+  assert.equal(reread.status, 200);
+  assert.equal(reread.body.config.master_prompt, "describe the news scene");
+  assert.equal(reread.body.config.min_interval_ms, 2500);
+  assert.equal(reread.body.config.daily_limit, 40);
+
   const bad = await j("/api/ai/config", {
     method: "PATCH",
     body: JSON.stringify({ min_interval_ms: -5 }),
@@ -364,7 +373,12 @@ test("GET/PATCH /api/ai/config reads and updates settings", async () => {
   // Restore defaults so other suites aren't affected.
   await j("/api/ai/config", {
     method: "PATCH",
-    body: JSON.stringify({ paused: false }),
+    body: JSON.stringify({
+      master_prompt: "Give me 5 descriptive keywords for this image.",
+      min_interval_ms: 1500,
+      daily_limit: 20,
+      paused: false,
+    }),
   });
 });
 
