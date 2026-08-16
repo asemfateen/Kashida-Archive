@@ -491,7 +491,11 @@ export default function Dashboard({
               <div className="flex flex-col items-center justify-center min-h-[55vh] gap-4 text-center">
                 <div className="w-16 h-16 rounded-3xl bg-surface-container-low flex items-center justify-center">
                   <span className="material-symbols-outlined text-3xl text-on-surface-variant">
-                    photo_library
+                    {activeFilter === "trash"
+                      ? "delete"
+                      : activeFilter === "favorites"
+                        ? "star"
+                        : "photo_library"}
                   </span>
                 </div>
                 <p className="font-title-sm text-title-sm text-midnight-ink">
@@ -505,24 +509,35 @@ export default function Dashboard({
                           ? "No images yet"
                           : "No assets match the active filters"}
                 </p>
-                {(images.length > 0 || results !== null) && (
-                  <p className="font-body-sm text-body-sm text-on-surface-variant">
-                    Try clearing the search or choosing another view.
-                  </p>
-                )}
+                <p className="font-body-sm text-body-sm text-on-surface-variant">
+                  {results !== null
+                    ? "Try clearing the search or choosing another view."
+                    : activeFilter === "trash"
+                      ? "Deleted photos end up here until they're restored or removed."
+                      : activeFilter === "favorites"
+                        ? "Tap the star on any photo to add it to your favorites."
+                        : "Upload photos or browse the gallery to get started."}
+                </p>
                 <button
                   onClick={() => {
-                    if (images.length > 0 || results !== null) {
-                      clearSearch();
-                    } else {
-                      onUpload();
-                    }
+                    if (results !== null) clearSearch();
+                    else if (
+                      activeFilter === "trash" ||
+                      activeFilter === "favorites"
+                    )
+                      onFilter("all");
+                    else if (images.length === 0) onUpload();
+                    else onFilter("all");
                   }}
                   className="mt-2 bg-midnight-ink hover:bg-prussian-navy text-white px-5 py-2.5 rounded-full font-label-caps text-label-caps transition-colors"
                 >
-                  {images.length === 0 && results === null
-                    ? "Upload your first image"
-                    : "Clear search"}
+                  {results !== null
+                    ? "Clear search"
+                    : activeFilter === "trash" || activeFilter === "favorites"
+                      ? "Browse Gallery"
+                      : images.length === 0
+                        ? "Upload your first image"
+                        : "Browse Gallery"}
                 </button>
               </div>
             )}
