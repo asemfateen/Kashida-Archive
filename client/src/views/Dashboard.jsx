@@ -11,10 +11,8 @@ export default function Dashboard({
   onOpenImage,
   onOpenList,
   onUpload,
-  onQuickTag,
   searchQuery = null,
   onFavorite,
-  lastOpened,
   onRestore,
   onDeleteForever,
   onEmptyTrash,
@@ -23,7 +21,6 @@ export default function Dashboard({
   const [query, setQuery] = useState("");
   const [results, setResults] = useState(null);
   const [searching, setSearching] = useState(false);
-  const [quickTag, setQuickTag] = useState("");
   const [toast, setToast] = useState(null);
   const [selectMode, setSelectMode] = useState(false);
   const [selected, setSelected] = useState(() => new Set());
@@ -117,22 +114,6 @@ export default function Dashboard({
   const galleryItems = baseItems;
 
   const count = galleryItems.length;
-
-  const handleQuickTag = async (e) => {
-    e.preventDefault();
-    const tag = quickTag
-      .trim()
-      .toLowerCase()
-      .replace(/[^\p{L}\p{N}_-]+/gu, " ");
-    if (!tag || !lastOpened) return;
-    try {
-      await onQuickTag(lastOpened, tag);
-      setQuickTag("");
-      showToast(`Tagged "${tag}" on ${lastOpened.original_filename}`);
-    } catch {
-      showToast("Failed to tag — try again");
-    }
-  };
 
   const handleFavorite = async (image) => {
     try {
@@ -621,33 +602,6 @@ export default function Dashboard({
                     </span>
                   </button>
                 </div>
-              </div>
-              <div className="mt-4 pt-4 border-t border-outline-variant">
-                <label className="font-label-caps text-label-caps text-on-surface-variant block mb-1">
-                  Quick-tag{" "}
-                  {lastOpened
-                    ? `(last opened: ${lastOpened.original_filename})`
-                    : "(open an image first)"}
-                </label>
-                <form className="relative" onSubmit={handleQuickTag}>
-                  <input
-                    value={quickTag}
-                    onChange={(e) => setQuickTag(e.target.value)}
-                    disabled={!lastOpened}
-                    className="w-full bg-surface-container-lowest border border-outline-variant focus:border-tertiary-container focus:ring-1 focus:ring-tertiary-container rounded p-2 font-body-sm text-body-sm text-on-surface outline-none disabled:opacity-50"
-                    placeholder="Add tag..."
-                    type="text"
-                  />
-                  <button
-                    type="submit"
-                    disabled={!lastOpened}
-                    className="absolute right-2 top-1/2 transform -translate-y-1/2 text-tertiary-container disabled:opacity-50"
-                  >
-                    <span className="material-symbols-outlined text-[18px]">
-                      add
-                    </span>
-                  </button>
-                </form>
               </div>
             </div>
           )}

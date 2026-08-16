@@ -73,7 +73,6 @@ function clearCaches() {
   }
   for (const key of keys) sessionStorage.removeItem(key);
 }
-import { mergeTags } from "./tags.js";
 
 const VIEWS = [
   "dashboard",
@@ -358,8 +357,6 @@ function Shell() {
                 onOpenImage={openImage}
                 onOpenList={openList}
                 onUpload={() => go(VIEW_PATH.upload)}
-                onQuickTag={(image, tag) => quickTag(image, tag, patchImage)}
-                lastOpened={lastOpened}
                 onFavorite={async (image) => {
                   const row = await toggleFavorite(image);
                   if (filter === "favorites" && !row.favorite) {
@@ -506,17 +503,3 @@ function ProfileShell() {
 }
 
 export { VIEWS };
-
-async function quickTag(image, tag, patchImage) {
-  if (!image) return;
-  try {
-    const merged = mergeTags(image.tags || "", [tag]);
-    const row = await updateImage(image.object_key, {
-      tags: merged.join(" "),
-    });
-    patchImage(image.object_key, row);
-  } catch (err) {
-    console.error("Quick tag failed:", err);
-    throw err;
-  }
-}
