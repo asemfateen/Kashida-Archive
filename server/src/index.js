@@ -5,7 +5,11 @@ import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import { PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
+import {
+  PutObjectCommand,
+  GetObjectCommand,
+  DeleteObjectCommand,
+} from "@aws-sdk/client-s3";
 import { r2, R2_BUCKET, isR2Configured } from "./r2.js";
 import pool from "./db.js";
 import { ai, GEMINI_MODEL, isGeminiConfigured } from "./gemini.js";
@@ -279,6 +283,10 @@ app.get("/api/images/serve/*", async (req, res) => {
     if (response.ContentLength) {
       res.setHeader("Content-Length", response.ContentLength);
     }
+    // Object keys are unique UUIDs, so the bytes never change for a given URL:
+    // cache aggressively so re-visiting the library does not re-stream every
+    // image from R2 through this server.
+    res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
     response.Body.pipe(res);
   } catch (err) {
     console.error("Serve image failed:", err.message);
@@ -361,6 +369,33 @@ app.delete("/api/images/:objectKey", async (req, res) => {
   if (objectKey.includes("\0")) {
     return res.status(400).json({ error: "invalid objectKey" });
   }
+  if (req.query.permanent === "true") {
+    try {
+      const { rows } = await pool.query(
+        `DELETE FROM images WHERE object_key = $1 RETURNING object_key`,
+        [objectKey],
+      );
+      if (rows.length === 0) {
+        return res.status(404).json({ error: "image not found" });
+      }
+      if (isR2Configured()) {
+        try {
+          await r2.send(
+            new DeleteObjectCommand({ Bucket: R2_BUCKET, Key: objectKey }),
+          );
+        } catch (r2Err) {
+          console.error(
+            "R2 object delete failed (row already removed):",
+            r2Err.message,
+          );
+        }
+      }
+      return res.json({ deleted: true, permanent: true });
+    } catch (err) {
+      console.error("Permanent delete failed:", err.message);
+      return res.status(500).json({ error: "failed to delete image" });
+    }
+  }
   try {
     const { rows } = await pool.query(
       `UPDATE images SET deleted = true WHERE object_key = $1 RETURNING id`,
@@ -373,6 +408,33 @@ app.delete("/api/images/:objectKey", async (req, res) => {
   } catch (err) {
     console.error("Delete image failed:", err.message);
     res.status(500).json({ error: "failed to delete image" });
+  }
+});
+
+app.delete("/api/trash", async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `DELETE FROM images WHERE deleted = true RETURNING object_key`,
+    );
+    if (isR2Configured()) {
+      for (const row of rows) {
+        try {
+          await r2.send(
+            new DeleteObjectCommand({ Bucket: R2_BUCKET, Key: row.object_key }),
+          );
+        } catch (r2Err) {
+          console.error(
+            "R2 object delete failed:",
+            row.object_key,
+            r2Err.message,
+          );
+        }
+      }
+    }
+    res.json({ deleted: rows.length });
+  } catch (err) {
+    console.error("Empty trash failed:", err.message);
+    res.status(500).json({ error: "failed to empty trash" });
   }
 });
 

@@ -19,7 +19,60 @@ import Detail from "./views/Detail.jsx";
 import Search from "./views/Search.jsx";
 import Collections from "./views/Collections.jsx";
 import Settings from "./views/Settings.jsx";
-import { getImage, listImages, updateImage } from "./api.js";
+import {
+  deleteImage,
+  emptyTrash,
+  getImage,
+  listImages,
+  updateImage,
+} from "./api.js";
+
+const CACHE_PREFIX = "kashida_cache_";
+const cacheKey = (view) => `${CACHE_PREFIX}${view}`;
+
+function readCache(view) {
+  try {
+    return JSON.parse(sessionStorage.getItem(cacheKey(view)));
+  } catch {
+    return null;
+  }
+}
+
+function writeCache(view, data) {
+  try {
+    sessionStorage.setItem(cacheKey(view), JSON.stringify(data));
+  } catch {
+    // Storage full or unavailable — cache is best-effort.
+  }
+}
+
+function dropFromCache(objectKey) {
+  for (let i = 0; i < sessionStorage.length; i += 1) {
+    const key = sessionStorage.key(i);
+    if (key && key.startsWith(CACHE_PREFIX)) {
+      try {
+        const val = JSON.parse(sessionStorage.getItem(key));
+        if (Array.isArray(val)) {
+          writeCache(
+            key.slice(CACHE_PREFIX.length),
+            val.filter((x) => x.object_key !== objectKey),
+          );
+        }
+      } catch {
+        // Ignore malformed entries.
+      }
+    }
+  }
+}
+
+function clearCaches() {
+  const keys = [];
+  for (let i = 0; i < sessionStorage.length; i += 1) {
+    const key = sessionStorage.key(i);
+    if (key && key.startsWith(CACHE_PREFIX)) keys.push(key);
+  }
+  for (const key of keys) sessionStorage.removeItem(key);
+}
 import { mergeTags } from "./tags.js";
 
 const VIEWS = [
@@ -86,21 +139,40 @@ function Shell() {
   const go = (path) => navigate(path);
   const goBack = () => navigate(-1);
 
-  const loadImages = useCallback(async (v) => {
-    setLoading(true);
-    setLoadError(null);
-    try {
-      setImages(await listImages(v));
-    } catch (err) {
-      setImages([]);
-      setLoadError(err?.message || "Failed to load images");
-    } finally {
-      setLoading(false);
-    }
+  const fetchImages = useCallback(async (v) => {
+    const data = await listImages(v);
+    writeCache(v, data);
+    setImages(data);
+    return data;
   }, []);
 
+  const loadImages = useCallback(
+    async (v, opts = {}) => {
+      if (!opts.silent) setLoading(true);
+      setLoadError(null);
+      try {
+        await fetchImages(v);
+      } catch (err) {
+        if (!opts.silent) {
+          setImages([]);
+          setLoadError(err?.message || "Failed to load images");
+        }
+      } finally {
+        if (!opts.silent) setLoading(false);
+      }
+    },
+    [fetchImages],
+  );
+
   useEffect(() => {
-    loadImages(filter);
+    // Hydrate instantly from the session cache, then refresh in the
+    // background so returning to the library never shows a spinner.
+    const cached = readCache(filter);
+    if (cached) {
+      setImages(cached);
+      setLoading(false);
+    }
+    loadImages(filter, { silent: Boolean(cached) });
   }, [filter, loadImages]);
 
   const openSearch = (q) => {
@@ -175,6 +247,27 @@ function Shell() {
     });
     patchImage(row.object_key, row);
     return row;
+  };
+
+  const deleteForever = async (objectKey) => {
+    try {
+      await deleteImage(objectKey, true);
+      removeFromList(objectKey);
+      dropFromCache(objectKey);
+    } catch (err) {
+      console.error("Permanent delete failed:", err);
+    }
+  };
+
+  const emptyTrashList = async () => {
+    try {
+      await emptyTrash();
+      setImages([]);
+      setDetailList(null);
+      clearCaches();
+    } catch (err) {
+      console.error("Empty trash failed:", err);
+    }
   };
 
   const selected =
@@ -279,11 +372,14 @@ function Shell() {
                     .then((row) => {
                       patchImage(objectKey, row);
                       removeFromList(objectKey);
+                      dropFromCache(objectKey);
                     })
                     .catch((err) => {
                       console.error("Restore failed:", err);
                     })
                 }
+                onDeleteForever={deleteForever}
+                onEmptyTrash={emptyTrashList}
               />
             )}
             {view === "upload" && (

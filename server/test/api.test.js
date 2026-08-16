@@ -268,6 +268,56 @@ test("DELETE soft-deletes, trash view shows it, PATCH restores", async () => {
   assert.equal(missing.status, 404);
 });
 
+test("DELETE ?permanent=true hard-deletes the row", async () => {
+  await j("/api/images", {
+    method: "POST",
+    body: JSON.stringify({
+      objectKey: key("hard"),
+      originalFilename: "hard.jpg",
+    }),
+  });
+
+  const del = await j(
+    `/api/images/${encodeURIComponent(key("hard"))}?permanent=true`,
+    {
+      method: "DELETE",
+    },
+  );
+  assert.equal(del.status, 200);
+  assert.deepEqual(del.body, { deleted: true, permanent: true });
+
+  const again = await j(
+    `/api/images/${encodeURIComponent(key("hard"))}?permanent=true`,
+    {
+      method: "DELETE",
+    },
+  );
+  assert.equal(again.status, 404);
+
+  const all = await j("/api/images?view=all");
+  assert.ok(!all.body.some((i) => i.object_key === key("hard")));
+});
+
+test("DELETE /api/trash empties the trash view", async () => {
+  await j("/api/images", {
+    method: "POST",
+    body: JSON.stringify({
+      objectKey: key("trash2"),
+      originalFilename: "trash2.jpg",
+    }),
+  });
+  await j(`/api/images/${encodeURIComponent(key("trash2"))}`, {
+    method: "DELETE",
+  });
+
+  const empty = await j("/api/trash", { method: "DELETE" });
+  assert.equal(empty.status, 200);
+  assert.ok(empty.body.deleted >= 1);
+
+  const trash = await j("/api/images?view=trash");
+  assert.ok(!trash.body.some((i) => i.object_key === key("trash2")));
+});
+
 test("GET /api/search matches tags with rank ordering", async () => {
   await j("/api/images", {
     method: "POST",

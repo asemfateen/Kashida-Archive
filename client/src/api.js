@@ -89,13 +89,27 @@ export async function updateImage(objectKey, patch) {
   return res.json();
 }
 
-export async function deleteImage(objectKey) {
-  const res = await fetch(`/api/images/${encodeURIComponent(objectKey)}`, {
+export async function deleteImage(objectKey, permanent) {
+  const params = permanent ? "?permanent=true" : "";
+  const res = await fetch(
+    `/api/images/${encodeURIComponent(objectKey)}${params}`,
+    {
+      method: "DELETE",
+      headers: authHeaders(),
+    },
+  );
+  if (!res.ok)
+    throw new Error((await res.json()).error || "failed to delete image");
+  return res.json();
+}
+
+export async function emptyTrash() {
+  const res = await fetch("/api/trash", {
     method: "DELETE",
     headers: authHeaders(),
   });
   if (!res.ok)
-    throw new Error((await res.json()).error || "failed to delete image");
+    throw new Error((await res.json()).error || "failed to empty trash");
   return res.json();
 }
 export async function tagImage(payload) {

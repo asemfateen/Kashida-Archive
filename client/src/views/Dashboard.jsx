@@ -19,6 +19,8 @@ export default function Dashboard({
   onFavorite,
   lastOpened,
   onRestore,
+  onDeleteForever,
+  onEmptyTrash,
 }) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState(null);
@@ -187,156 +189,186 @@ export default function Dashboard({
         {/* Main Content Canvas */}
         <main className="flex-1 bg-background overflow-y-auto flex flex-col relative">
           {/* Asset Grid */}
-          <div className="p-margin-page masonry-grid pb-24">
-            {loading && (
-              <p className="font-body-md text-body-md text-on-surface-variant col-span-full">
-                Loading library...
-              </p>
-            )}
-            {loadError && !loading && (
-              <div className="flex flex-col items-center justify-center py-24 gap-3 text-center col-span-full">
-                <span className="material-symbols-outlined text-5xl text-error">
-                  cloud_off
-                </span>
-                <p className="font-title-sm text-title-sm text-on-surface">
-                  Couldn't load the library
-                </p>
-                <p className="font-body-sm text-body-sm text-on-surface-variant max-w-md">
-                  {loadError}
+          <div className="p-margin-page pb-24">
+            {activeFilter === "trash" && galleryItems.length > 0 && (
+              <div className="flex items-center justify-between mb-4">
+                <p className="font-body-sm text-body-sm text-on-surface-variant">
+                  {galleryItems.length} item
+                  {galleryItems.length === 1 ? "" : "s"} in trash
                 </p>
                 <button
-                  onClick={onRetry}
-                  className="mt-2 bg-tertiary text-on-tertiary px-4 py-2 rounded-lg font-label-caps text-label-caps hover:bg-tertiary-container transition-colors"
+                  onClick={onEmptyTrash}
+                  className="bg-error-container text-on-error-container font-label-caps text-label-caps px-4 py-2 rounded-lg hover:bg-error hover:text-on-error transition-colors"
                 >
-                  Retry
+                  Empty Trash
                 </button>
               </div>
             )}
-            {!loading && !loadError && galleryItems.length === 0 && (
-              <div className="flex flex-col items-center justify-center py-24 gap-3 text-center">
-                <span className="material-symbols-outlined text-5xl text-primary-fixed-dim">
-                  photo_library
-                </span>
-                <p className="font-title-sm text-title-sm text-primary">
-                  {results !== null
-                    ? "No matches found"
-                    : activeFilter === "trash"
-                      ? "Trash is empty"
-                      : activeFilter === "favorites"
-                        ? "No favorites yet — star an image"
-                        : images.length === 0
-                          ? "No images yet"
-                          : "No assets match the active filters"}
+            <div className="masonry-grid">
+              {loading && (
+                <p className="font-body-md text-body-md text-on-surface-variant col-span-full">
+                  Loading library...
                 </p>
-                <button
-                  onClick={() => {
-                    if (images.length > 0 || results !== null) {
-                      setResults(null);
-                      setQuery("");
-                      onFilter("all");
-                    } else {
-                      onUpload();
-                    }
-                  }}
-                  className="mt-2 bg-tertiary text-on-tertiary px-4 py-2 rounded-lg font-label-caps text-label-caps hover:bg-tertiary-container transition-colors"
-                >
-                  {images.length === 0 && results === null
-                    ? "Upload your first image"
-                    : "Clear search"}
-                </button>
-              </div>
-            )}
-            {galleryItems.map((image) => {
-              const item = normalize(image);
-              const isTrash = activeFilter === "trash";
-              const src = item.src;
-              return (
-                <div
-                  key={item.id || item.object_key}
-                  onClick={() => {
-                    if (results !== null) {
-                      onOpenList(
-                        galleryItems.map(normalize),
-                        galleryItems.indexOf(image),
-                      );
-                    } else {
-                      onOpenImage(item);
-                    }
-                  }}
-                  className="masonry-item relative group photo-card rounded bg-surface-container-lowest border border-outline-variant overflow-hidden shadow-[0px_10px_15px_rgba(0,0,0,0.05)] cursor-pointer"
-                >
-                  <img
-                    className="w-full object-cover"
-                    src={src}
-                    alt={item.caption}
-                    onLoad={() => markMeasured(src)}
-                    onError={(e) => {
-                      e.currentTarget.style.display = "none";
-                      e.currentTarget.parentElement.classList.add(
-                        "aspect-[4/3]",
-                        "bg-surface-variant",
-                      );
+              )}
+              {loadError && !loading && (
+                <div className="flex flex-col items-center justify-center py-24 gap-3 text-center col-span-full">
+                  <span className="material-symbols-outlined text-5xl text-error">
+                    cloud_off
+                  </span>
+                  <p className="font-title-sm text-title-sm text-on-surface">
+                    Couldn't load the library
+                  </p>
+                  <p className="font-body-sm text-body-sm text-on-surface-variant max-w-md">
+                    {loadError}
+                  </p>
+                  <button
+                    onClick={onRetry}
+                    className="mt-2 bg-tertiary text-on-tertiary px-4 py-2 rounded-lg font-label-caps text-label-caps hover:bg-tertiary-container transition-colors"
+                  >
+                    Retry
+                  </button>
+                </div>
+              )}
+              {!loading && !loadError && galleryItems.length === 0 && (
+                <div className="flex flex-col items-center justify-center py-24 gap-3 text-center">
+                  <span className="material-symbols-outlined text-5xl text-primary-fixed-dim">
+                    photo_library
+                  </span>
+                  <p className="font-title-sm text-title-sm text-primary">
+                    {results !== null
+                      ? "No matches found"
+                      : activeFilter === "trash"
+                        ? "Trash is empty"
+                        : activeFilter === "favorites"
+                          ? "No favorites yet — star an image"
+                          : images.length === 0
+                            ? "No images yet"
+                            : "No assets match the active filters"}
+                  </p>
+                  <button
+                    onClick={() => {
+                      if (images.length > 0 || results !== null) {
+                        setResults(null);
+                        setQuery("");
+                        onFilter("all");
+                      } else {
+                        onUpload();
+                      }
                     }}
-                  />
-                  <div className="absolute inset-0 border-[3px] border-transparent group-hover:border-tertiary-container transition-colors z-10 pointer-events-none"></div>
-                  {/* Actions Overlay */}
-                  <div className="photo-actions absolute top-2 left-2 right-2 flex justify-between opacity-0 transition-opacity z-20">
-                    {isTrash ? (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onRestore(item.object_key);
-                        }}
-                        className="w-7 h-7 rounded bg-surface-container-lowest/90 backdrop-blur flex items-center justify-center border border-outline-variant text-primary"
-                        title="Restore"
-                      >
-                        <span className="material-symbols-outlined text-[16px]">
-                          restore
-                        </span>
-                      </button>
-                    ) : (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleFavorite(item);
-                        }}
-                        className="w-7 h-7 rounded bg-surface-container-lowest/80 backdrop-blur flex items-center justify-center border border-outline-variant text-tertiary-container hover:bg-surface-container-lowest transition-colors"
-                        title={
-                          item.favorite
-                            ? "Remove from favorites"
-                            : "Add to favorites"
-                        }
-                      >
-                        <span
-                          className="material-symbols-outlined text-[16px]"
-                          style={
+                    className="mt-2 bg-tertiary text-on-tertiary px-4 py-2 rounded-lg font-label-caps text-label-caps hover:bg-tertiary-container transition-colors"
+                  >
+                    {images.length === 0 && results === null
+                      ? "Upload your first image"
+                      : "Clear search"}
+                  </button>
+                </div>
+              )}
+              {galleryItems.map((image) => {
+                const item = normalize(image);
+                const isTrash = activeFilter === "trash";
+                const src = item.src;
+                return (
+                  <div
+                    key={item.id || item.object_key}
+                    onClick={() => {
+                      if (results !== null) {
+                        onOpenList(
+                          galleryItems.map(normalize),
+                          galleryItems.indexOf(image),
+                        );
+                      } else {
+                        onOpenImage(item);
+                      }
+                    }}
+                    className="masonry-item relative group photo-card rounded bg-surface-container-lowest border border-outline-variant overflow-hidden shadow-[0px_10px_15px_rgba(0,0,0,0.05)] cursor-pointer"
+                  >
+                    <img
+                      className="w-full object-cover"
+                      src={src}
+                      alt={item.caption}
+                      onLoad={() => markMeasured(src)}
+                      onError={(e) => {
+                        e.currentTarget.style.display = "none";
+                        e.currentTarget.parentElement.classList.add(
+                          "aspect-[4/3]",
+                          "bg-surface-variant",
+                        );
+                      }}
+                    />
+                    <div className="absolute inset-0 border-[3px] border-transparent group-hover:border-tertiary-container transition-colors z-10 pointer-events-none"></div>
+                    {/* Actions Overlay */}
+                    <div className="photo-actions absolute top-2 left-2 right-2 flex justify-between opacity-0 transition-opacity z-20">
+                      {isTrash ? (
+                        <div className="flex gap-2">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onRestore(item.object_key);
+                            }}
+                            className="w-7 h-7 rounded bg-surface-container-lowest/90 backdrop-blur flex items-center justify-center border border-outline-variant text-primary"
+                            title="Restore"
+                          >
+                            <span className="material-symbols-outlined text-[16px]">
+                              restore
+                            </span>
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onDeleteForever(item.object_key);
+                            }}
+                            className="w-7 h-7 rounded bg-error-container/90 backdrop-blur flex items-center justify-center border border-outline-variant text-on-error-container hover:bg-error hover:text-on-error transition-colors"
+                            title="Delete forever"
+                          >
+                            <span className="material-symbols-outlined text-[16px]">
+                              delete_forever
+                            </span>
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleFavorite(item);
+                          }}
+                          className="w-7 h-7 rounded bg-surface-container-lowest/80 backdrop-blur flex items-center justify-center border border-outline-variant text-tertiary-container hover:bg-surface-container-lowest transition-colors"
+                          title={
                             item.favorite
-                              ? { fontVariationSettings: "'FILL' 1" }
-                              : undefined
+                              ? "Remove from favorites"
+                              : "Add to favorites"
                           }
                         >
-                          {item.favorite ? "star" : "star_outline"}
-                        </span>
-                      </button>
-                    )}
-                  </div>
-                  {/* Metadata Overlay */}
-                  <div className="photo-metadata absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-3 pt-8 opacity-0 transition-opacity z-20 text-white">
-                    {item.category && (
-                      <p className="font-label-caps text-label-caps mb-1">
-                        {item.category}
+                          <span
+                            className="material-symbols-outlined text-[16px]"
+                            style={
+                              item.favorite
+                                ? { fontVariationSettings: "'FILL' 1" }
+                                : undefined
+                            }
+                          >
+                            {item.favorite ? "star" : "star_outline"}
+                          </span>
+                        </button>
+                      )}
+                    </div>
+                    {/* Metadata Overlay */}
+                    <div className="photo-metadata absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-3 pt-8 opacity-0 transition-opacity z-20 text-white">
+                      {item.category && (
+                        <p className="font-label-caps text-label-caps mb-1">
+                          {item.category}
+                        </p>
+                      )}
+                      <p className="font-body-sm text-body-sm truncate">
+                        {item.caption}
                       </p>
-                    )}
-                    <p className="font-body-sm text-body-sm truncate">
-                      {item.caption}
-                    </p>
-                    <p className="font-mono-data text-mono-data text-white/70 mt-1">
-                      {item.meta}
-                    </p>
+                      <p className="font-mono-data text-mono-data text-white/70 mt-1">
+                        {item.meta}
+                      </p>
+                    </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
         </main>
 
