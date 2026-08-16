@@ -6,6 +6,7 @@ const NAV_ITEMS = [
   { key: "favorites", icon: "star", label: "Favorites" },
   { key: "trash", icon: "delete", label: "Trash" },
   { key: "upload", icon: "cloud", label: "Cloud" },
+  { key: "ai", icon: "auto_awesome", label: "AI" },
 ];
 
 const RAIL_BUTTON =

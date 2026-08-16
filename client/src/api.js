@@ -149,3 +149,100 @@ export async function tagImage(payload) {
   if (!res.ok) throw new Error(await errMessage(res, "AI tagging failed"));
   return res.json();
 }
+
+// ---------------------------------------------------------------------------
+// AI control plane (/api/ai/*) — queue, status and config
+// ---------------------------------------------------------------------------
+
+export async function getAiStatus() {
+  const res = await fetch("/api/ai/status", { headers: authHeaders() });
+  if (!res.ok)
+    throw new Error(await errMessage(res, "failed to load AI status"));
+  return res.json();
+}
+
+export async function listAiJobs({ status, limit = 200 } = {}) {
+  const params = new URLSearchParams();
+  if (status) params.set("status", status);
+  params.set("limit", String(limit));
+  const res = await fetch(`/api/ai/jobs?${params}`, { headers: authHeaders() });
+  if (!res.ok)
+    throw new Error(await errMessage(res, "failed to load AI queue"));
+  return res.json();
+}
+
+export async function enqueueAiJobs(objectKeys, prompt) {
+  const res = await fetch("/api/ai/jobs", {
+    method: "POST",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({ objectKeys, prompt }),
+  });
+  if (!res.ok)
+    throw new Error(await errMessage(res, "failed to queue AI tagging"));
+  return res.json();
+}
+
+export async function patchAiJob(jobId, patch) {
+  const res = await fetch(`/api/ai/jobs/${encodeURIComponent(jobId)}`, {
+    method: "PATCH",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify(patch),
+  });
+  if (!res.ok) throw new Error(await errMessage(res, "failed to update job"));
+  return res.json();
+}
+
+export async function retryAiJob(jobId) {
+  const res = await fetch(`/api/ai/jobs/${encodeURIComponent(jobId)}/retry`, {
+    method: "POST",
+    headers: authHeaders(),
+  });
+  if (!res.ok) throw new Error(await errMessage(res, "failed to retry job"));
+  return res.json();
+}
+
+export async function retryAllFailedAiJobs() {
+  const res = await fetch("/api/ai/jobs/retry-failed", {
+    method: "POST",
+    headers: authHeaders(),
+  });
+  if (!res.ok)
+    throw new Error(await errMessage(res, "failed to retry failed jobs"));
+  return res.json();
+}
+
+export async function cancelAllAiJobs() {
+  const res = await fetch("/api/ai/jobs/cancel-all", {
+    method: "POST",
+    headers: authHeaders(),
+  });
+  if (!res.ok) throw new Error(await errMessage(res, "failed to cancel jobs"));
+  return res.json();
+}
+
+export async function deleteAiJob(jobId) {
+  const res = await fetch(`/api/ai/jobs/${encodeURIComponent(jobId)}`, {
+    method: "DELETE",
+    headers: authHeaders(),
+  });
+  if (!res.ok) throw new Error(await errMessage(res, "failed to delete job"));
+  return res.json();
+}
+
+export async function getAiConfig() {
+  const res = await fetch("/api/ai/config", { headers: authHeaders() });
+  if (!res.ok)
+    throw new Error(await errMessage(res, "failed to load AI settings"));
+  return res.json();
+}
+
+export async function patchAiConfig(patch) {
+  const res = await fetch("/api/ai/config", {
+    method: "PATCH",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify(patch),
+  });
+  if (!res.ok)
+    throw new Error(await errMessage(res, "failed to save AI settings"));
+  return res.json();
+}

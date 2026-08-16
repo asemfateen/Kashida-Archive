@@ -19,6 +19,7 @@ import Detail from "./views/Detail.jsx";
 import Search from "./views/Search.jsx";
 import Collections from "./views/Collections.jsx";
 import Settings from "./views/Settings.jsx";
+import Ai from "./views/Ai.jsx";
 import {
   deleteImage,
   emptyTrash,
@@ -82,6 +83,7 @@ const VIEWS = [
   "search",
   "collections",
   "settings",
+  "ai",
 ];
 
 const VIEW_PATH = {
@@ -91,6 +93,7 @@ const VIEW_PATH = {
   search: "/search",
   collections: "/collections",
   settings: "/settings",
+  ai: "/ai",
 };
 
 function pathToView(pathname) {
@@ -99,6 +102,7 @@ function pathToView(pathname) {
   if (pathname.startsWith("/detail")) return "detail";
   if (pathname.startsWith("/collections")) return "collections";
   if (pathname.startsWith("/settings")) return "settings";
+  if (pathname.startsWith("/ai")) return "ai";
   return "dashboard";
 }
 
@@ -326,6 +330,10 @@ function Shell() {
       go(VIEW_PATH.collections);
       return;
     }
+    if (key === "ai") {
+      go(VIEW_PATH.ai);
+      return;
+    }
     setFilter(key);
     if (view !== "dashboard") go(VIEW_PATH.dashboard);
   };
@@ -346,9 +354,11 @@ function Shell() {
                 ? "upload"
                 : view === "collections"
                   ? "collections"
-                  : view === "dashboard"
-                    ? filter
-                    : null
+                  : view === "ai"
+                    ? "ai"
+                    : view === "dashboard"
+                      ? filter
+                      : null
             }
             onNavigate={handleNav}
             onSettings={() => go(VIEW_PATH.settings)}
@@ -447,6 +457,7 @@ function Shell() {
             {view === "settings" && (
               <Settings imageCount={images.length} onBack={() => goBack()} />
             )}
+            {view === "ai" && <Ai />}
           </div>
         </div>
       </div>
@@ -505,6 +516,7 @@ function ProfileShell() {
             activeKey={null}
             onNavigate={(key) => {
               if (key === "upload") go("/upload");
+              else if (key === "ai") go("/ai");
               else go("/");
             }}
             onSettings={() => go("/settings")}

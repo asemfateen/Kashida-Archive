@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
+import { getAiConfig, getAiStatus, patchAiConfig } from "../api.js";
 import { collections, savedSearches, feedback } from "../store.js";
+import { pushError } from "../notify.jsx";
 
 const DEFAULT_PROMPT = "Give me 5 descriptive keywords for this image.";
 
@@ -11,14 +13,9 @@ const SHORTCUTS = [
 ];
 
 export default function Settings({ onBack, imageCount }) {
-  const [prompt, setPrompt] = useState(() => {
-    try {
-      return localStorage.getItem("masterPrompt") || DEFAULT_PROMPT;
-    } catch {
-      return DEFAULT_PROMPT;
-    }
-  });
+  const [prompt, setPrompt] = useState(DEFAULT_PROMPT);
   const [saved, setSaved] = useState(false);
+  const [aiStatus, setAiStatus] = useState(null);
   const [status, setStatus] = useState({
     check: false,
     ok: false,
@@ -31,13 +28,12 @@ export default function Settings({ onBack, imageCount }) {
   const savePrompt = () => {
     const next = prompt.trim() || DEFAULT_PROMPT;
     setPrompt(next);
-    try {
-      localStorage.setItem("masterPrompt", next);
-    } catch {
-      /* ignore */
-    }
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+    patchAiConfig({ master_prompt: next })
+      .then(() => {
+        setSaved(true);
+        setTimeout(() => setSaved(false), 2000);
+      })
+      .catch((err) => pushError(err?.message || "Could not save prompt"));
   };
 
   const checkStatus = async () => {
@@ -69,6 +65,19 @@ export default function Settings({ onBack, imageCount }) {
 
   useEffect(() => {
     checkStatus();
+    getAiConfig()
+      .then(({ config }) => {
+        if (config?.master_prompt) setPrompt(config.master_prompt);
+      })
+      .catch(() => {
+        /* AI config is best-effort here */
+      });
+    getAiStatus()
+      .then(setAiStatus)
+      .catch(() => {
+        /* keep the row in its fallback state */
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const sendFeedback = (e) => {
@@ -146,9 +155,26 @@ export default function Settings({ onBack, imageCount }) {
                 </span>
               </Row>
               <Row label="AI tagging">
-                <span className="font-body-sm text-body-sm text-on-surface-variant">
-                  Needs GEMINI_API_KEY in server/.env
-                </span>
+                {aiStatus?.configured ? (
+                  <span className="flex items-center gap-1.5 font-body-sm text-body-sm text-tertiary">
+                    <span
+                      className={`w-2 h-2 rounded-full ${
+                        aiStatus.paused || aiStatus.quota?.rate_limited
+                          ? "bg-amber-500"
+                          : "bg-tertiary"
+                      }`}
+                    ></span>
+                    {aiStatus.paused
+                      ? "paused"
+                      : aiStatus.quota?.rate_limited
+                        ? "rate-limited"
+                        : aiStatus.model || "ready"}
+                  </span>
+                ) : (
+                  <span className="font-body-sm text-body-sm text-on-surface-variant">
+                    Needs GEMINI_API_KEY in server/.env
+                  </span>
+                )}
               </Row>
               <Row label="Cloud storage">
                 <span className="font-body-sm text-body-sm text-on-surface-variant">
@@ -177,7 +203,8 @@ export default function Settings({ onBack, imageCount }) {
             </div>
             <p className="font-body-sm text-body-sm text-on-surface-variant mb-3">
               Used when you AI-tag any image (Cmd/Ctrl+T in the asset viewer, or
-              the AI button next to Tags).
+              the AI button next to Tags). Saved to the server — the AI Control
+              page can edit it too.
             </p>
             <textarea
               value={prompt}

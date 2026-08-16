@@ -4,6 +4,9 @@ import assert from "node:assert/strict";
 // Configure the tag route's guards before importing the server so the
 // SSRF allowlist and fetch path are reachable in these tests.
 process.env.GEMINI_API_KEY = process.env.GEMINI_API_KEY || "test-key";
+// Keep the background AI queue worker idle: it would otherwise drain the
+// shared dev DB while other parallel test files create jobs.
+process.env.AI_QUEUE = "false";
 
 const { app, server: moduleServer } = await import("../src/index.js");
 const { RATE_UPLOAD } = await import("../src/index.js");
@@ -73,6 +76,9 @@ after(async () => {
   server?.close();
   moduleServer?.close();
   await pool.query(`DELETE FROM images WHERE object_key LIKE $1`, [
+    `${TEST_PREFIX}/%`,
+  ]);
+  await pool.query(`DELETE FROM ai_jobs WHERE object_key LIKE $1`, [
     `${TEST_PREFIX}/%`,
   ]);
   await pool.end();
@@ -235,48 +241,20 @@ test("unknown /api route -> 404 JSON", async () => {
   assert.equal(body.error, "not found");
 });
 
-test("tag route blocks SSRF imageUrl and gates the fetch path", async () => {
-  const evil = await j("/api/images/tag", {
-    method: "POST",
-    body: JSON.stringify({
-      objectKey: key("tag"),
-      imageUrl: "https://evil.example/x.jpg",
-    }),
-  });
-  assert.equal(evil.status, 400);
-
-  const fileScheme = await j("/api/images/tag", {
-    method: "POST",
-    body: JSON.stringify({
-      objectKey: key("tag"),
-      imageUrl: "file:///etc/passwd",
-    }),
-  });
-  assert.equal(fileScheme.status, 400);
-
-  const notImage = await j("/api/images/tag", {
-    method: "POST",
-    body: JSON.stringify({
-      objectKey: key("tag"),
-      imageUrl: `${base}/api/health`,
-    }),
-  });
-  assert.equal(notImage.status, 502); // our own origin but non-image content-type
-
+test("tag route enqueues into the AI queue", async () => {
   const missing = await j("/api/images/tag", {
     method: "POST",
-    body: JSON.stringify({
-      objectKey: key("tag"),
-      imageUrl: `${base}/gone.jpg`,
-    }),
+    body: JSON.stringify({}),
   });
-  assert.equal(missing.status, 502);
+  assert.equal(missing.status, 400);
 
-  const noSource = await j("/api/images/tag", {
+  const enqueued = await j("/api/images/tag", {
     method: "POST",
     body: JSON.stringify({ objectKey: key("tag") }),
   });
-  assert.equal(noSource.status, 400);
+  assert.equal(enqueued.status, 201);
+  assert.equal(enqueued.body.queued, true);
+  assert.ok(typeof enqueued.body.jobId === "string");
 });
 
 test("concurrent duplicate saves: exactly one 201, rest 409", async () => {

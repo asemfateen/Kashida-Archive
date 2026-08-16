@@ -1,19 +1,15 @@
 import { useEffect, useRef, useState } from "react";
-import { tagImage, updateImage, deleteImage } from "../api.js";
+import {
+  enqueueAiJobs,
+  getAiConfig,
+  patchAiConfig,
+  updateImage,
+  deleteImage,
+} from "../api.js";
 import { collections } from "../store.js";
-import { mergeTags } from "../tags.js";
-import { makeThumbnail } from "../thumbnail.js";
 import { pushError } from "../notify.jsx";
 
 const DEFAULT_PROMPT = "Give me 5 descriptive keywords for this image.";
-
-function loadPrompt() {
-  try {
-    return localStorage.getItem("masterPrompt") || DEFAULT_PROMPT;
-  } catch {
-    return DEFAULT_PROMPT;
-  }
-}
 
 export default function Detail({
   image,
@@ -30,7 +26,8 @@ export default function Detail({
   );
   const [tagging, setTagging] = useState(false);
   const [tagError, setTagError] = useState(null);
-  const [prompt, setPrompt] = useState(loadPrompt);
+  const [tagNotice, setTagNotice] = useState(null);
+  const [prompt, setPrompt] = useState(DEFAULT_PROMPT);
   const [promptModal, setPromptModal] = useState(false);
   const [draftPrompt, setDraftPrompt] = useState("");
   const [newTag, setNewTag] = useState("");
@@ -91,8 +88,19 @@ export default function Detail({
     setTags((image.tags || "").split(" ").filter(Boolean));
     setZoom(1);
     setTagError(null);
+    setTagNotice(null);
     setTagging(false);
   }, [image.object_key]);
+
+  useEffect(() => {
+    getAiConfig()
+      .then(({ config }) => {
+        if (config?.master_prompt) setPrompt(config.master_prompt);
+      })
+      .catch(() => {
+        /* AI config is best-effort here */
+      });
+  }, []);
 
   useEffect(() => {
     const onKey = (e) => {
@@ -173,34 +181,18 @@ export default function Detail({
 
   const handleTag = async () => {
     if (tagging) return;
-    const requestedKey = image.object_key;
     setTagging(true);
     setTagError(null);
+    setTagNotice(null);
     try {
-      let thumbnail = null;
-      try {
-        thumbnail = await makeThumbnail(src);
-      } catch {
-        thumbnail = null;
-      }
-      const payload = thumbnail
-        ? { objectKey: requestedKey, thumbnail, prompt }
-        : { objectKey: requestedKey, imageUrl: src, prompt };
-      const res = await tagImage(payload);
-      // The server merges the AI tags into the existing set (case-insensitive
-      // dedupe). Prefer its stored value; fall back to a local merge so the UI
-      // never shows an overwritten tag set.
-      const merged = res.image?.tags
-        ? res.image.tags.split(" ").filter(Boolean)
-        : mergeTags(image.tags || "", res.tags);
-      onUpdated({ object_key: requestedKey, tags: merged.join(" ") });
-      if (keyRef.current === requestedKey) {
-        setTags(merged);
-      }
+      await enqueueAiJobs([image.object_key]);
+      setTagNotice(
+        "Added to the AI queue — it tags in the background. Check AI Control.",
+      );
     } catch (err) {
-      if (keyRef.current === requestedKey) setTagError(err.message);
+      setTagError(err?.message || "Could not queue AI tagging");
     } finally {
-      if (keyRef.current === requestedKey) setTagging(false);
+      setTagging(false);
     }
   };
 
@@ -213,12 +205,10 @@ export default function Detail({
   const savePrompt = () => {
     const next = draftPrompt.trim() || DEFAULT_PROMPT;
     setPrompt(next);
-    try {
-      localStorage.setItem("masterPrompt", next);
-    } catch {
-      /* ignore */
-    }
     setPromptModal(false);
+    patchAiConfig({ master_prompt: next }).catch((err) =>
+      pushError(err?.message || "Could not save prompt"),
+    );
   };
   return (
     <>
@@ -459,7 +449,7 @@ export default function Detail({
                     >
                       auto_awesome
                     </span>
-                    {tagging ? "Tagging..." : "AI"}
+                    {tagging ? "Queueing..." : "AI"}
                   </button>
                   <span className="font-mono-data text-mono-data text-secondary text-[10px]">
                     Cmd+T
@@ -469,6 +459,11 @@ export default function Detail({
               {tagError && (
                 <p className="font-body-sm text-body-sm text-error mb-2">
                   {tagError}
+                </p>
+              )}
+              {tagNotice && (
+                <p className="font-body-sm text-body-sm text-tertiary mb-2">
+                  {tagNotice}
                 </p>
               )}
               {/* Existing Tags (Chips) */}
@@ -650,8 +645,8 @@ export default function Detail({
               Master AI Tagging Prompt
             </h3>
             <p className="font-body-sm text-body-sm text-on-surface-variant mb-3">
-              Used when you AI-tag any image. Right-click the AI button to
-              reopen this editor.
+              Used when you AI-tag any image. Saved to the server — right-click
+              the AI button to reopen this editor.
             </p>
             <textarea
               value={draftPrompt}

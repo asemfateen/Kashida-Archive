@@ -3,23 +3,12 @@ import { useNavigate } from "react-router-dom";
 import {
   batchDelete,
   batchUpdate,
+  enqueueAiJobs,
   searchImages,
-  tagImage,
   updateImage,
 } from "../api.js";
 import { mergeTags } from "../tags.js";
-import { makeThumbnail } from "../thumbnail.js";
 import { pushError } from "../notify.jsx";
-
-const DEFAULT_PROMPT = "Give me 5 descriptive keywords for this image.";
-
-function loadPrompt() {
-  try {
-    return localStorage.getItem("masterPrompt") || DEFAULT_PROMPT;
-  } catch {
-    return DEFAULT_PROMPT;
-  }
-}
 
 export default function Dashboard({
   images,
@@ -48,7 +37,6 @@ export default function Dashboard({
   const [tagModal, setTagModal] = useState(false);
   const [manualInput, setManualInput] = useState("");
   const [aiBusy, setAiBusy] = useState(false);
-  const [aiProgress, setAiProgress] = useState(null);
   const [tagFailures, setTagFailures] = useState([]);
   const [rightCollapsed, setRightCollapsed] = useState(
     () => localStorage.getItem("kashida_right_panel_collapsed") !== "0",
@@ -199,46 +187,27 @@ export default function Dashboard({
   const runAITag = async () => {
     const items = selectedItems();
     if (items.length === 0) return;
-    if (
-      !window.confirm(
-        `AI-tag ${items.length} photo${items.length === 1 ? "" : "s"} with Gemini? This may take a moment.`,
-      )
-    )
-      return;
-    const prompt = loadPrompt();
     setAiBusy(true);
     setTagFailures([]);
-    let done = 0;
-    let failed = 0;
-    for (const item of items) {
-      const label = item.caption || item.original_filename || item.object_key;
-      try {
-        let thumbnail = null;
-        try {
-          thumbnail = await makeThumbnail(item.thumb || item.src);
-        } catch {
-          thumbnail = null;
-        }
-        const payload = thumbnail
-          ? { objectKey: item.object_key, thumbnail, prompt }
-          : {
-              objectKey: item.object_key,
-              imageUrl: item.thumb || item.src,
-              prompt,
-            };
-        await tagImage(payload);
-      } catch (err) {
-        failed += 1;
-        const msg = err?.message || "AI tagging failed";
-        setTagFailures((prev) => [...prev, { label, message: msg }]);
-        pushError(`${label}: ${msg}`);
-      }
-      done += 1;
-      setAiProgress({ done, total: items.length });
+    try {
+      await enqueueAiJobs(items.map((i) => i.object_key));
+      clearSelection();
+      setTagModal(false);
+      showToast(
+        `Queued ${items.length} photo${items.length === 1 ? "" : "s"} for AI tagging`,
+      );
+      onChanged?.();
+    } catch (err) {
+      setTagFailures([
+        {
+          label: "AI tagging",
+          message: err?.message || "Could not queue AI tagging",
+        },
+      ]);
+      pushError(err?.message || "Could not queue AI tagging");
+    } finally {
+      setAiBusy(false);
     }
-    setAiBusy(false);
-    setAiProgress(null);
-    finishTagging(items.length - failed, failed);
   };
 
   const parseManualTags = (value) =>
@@ -907,10 +876,10 @@ export default function Dashboard({
                 disabled={aiBusy}
                 className="flex items-center justify-center gap-2 bg-midnight-ink text-white px-4 py-2.5 rounded-full text-sm font-medium hover:bg-prussian-navy transition-colors disabled:opacity-60"
               >
-                {aiBusy && aiProgress ? (
+                {aiBusy ? (
                   <>
                     <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
-                    Tagging {aiProgress.done}/{aiProgress.total}...
+                    Queueing...
                   </>
                 ) : (
                   <>
@@ -922,7 +891,8 @@ export default function Dashboard({
                 )}
               </button>
               <p className="font-body-sm text-body-sm text-on-surface-variant">
-                Runs Gemini on each photo and merges the results into its tags.
+                Adds each photo to the AI queue — they tag in the background.
+                Watch and manage them in AI Control.
               </p>
             </div>
 

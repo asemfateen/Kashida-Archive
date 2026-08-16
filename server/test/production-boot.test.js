@@ -31,6 +31,7 @@ function startServer(extraEnv = {}) {
       PORT: String(port),
       DB_INIT_RETRIES: "5",
       DB_INIT_RETRY_DELAY_MS: "200",
+      AI_QUEUE: "false",
       ...extraEnv,
     },
     stdio: ["ignore", "pipe", "pipe"],

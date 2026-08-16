@@ -13,9 +13,18 @@ import {
 import sharp from "sharp";
 import { r2, R2_BUCKET, isR2Configured } from "./r2.js";
 import pool from "./db.js";
-import { ai, GEMINI_MODEL, isGeminiConfigured } from "./gemini.js";
-import { parseTags, mergeTags } from "./tagParser.js";
+import { GEMINI_MODEL, isGeminiConfigured } from "./gemini.js";
 import initDb from "./initDb.js";
+import {
+  getConfig,
+  setConfig,
+  getPaused,
+  setPaused,
+  getRateLimitStatus,
+  getQueueCounts,
+  startQueue,
+  VALID_STATUSES,
+} from "./aiQueue.js";
 import {
   ADMIN_USER,
   isAuthConfigured,
@@ -38,6 +47,7 @@ async function ensureDb() {
   if (dbReady) return;
   try {
     dbReady = await initDb();
+    if (dbReady) startQueue();
   } catch (err) {
     console.error("[app] Database initialization failed:", err.message);
     dbReady = false;
@@ -84,8 +94,9 @@ function makeRateLimit({ windowMs, max }) {
 }
 const RATE_UPLOAD = makeRateLimit({ windowMs: 60_000, max: 600 });
 const RATE_TAG = makeRateLimit({ windowMs: 60_000, max: 60 });
+const RATE_AI_JOBS = makeRateLimit({ windowMs: 60_000, max: 300 });
 // Tests reset these between cases to avoid cross-test leaks.
-export { RATE_UPLOAD, RATE_TAG };
+export { RATE_UPLOAD, RATE_TAG, RATE_AI_JOBS };
 app.get("/api/health", async (req, res) => {
   await dbInit;
   res.json({ ok: true, service: "kashida-archive", db: dbReady });
@@ -729,71 +740,11 @@ app.get("/api/search", async (req, res) => {
   }
 });
 
-const DEFAULT_TAG_PROMPT = "Give me 5 descriptive keywords for this image.";
-const MAX_TAG_IMAGE_BYTES = 10 * 1024 * 1024;
-
-// imageUrl is attacker-controlled, so a fetch of it is an SSRF sink unless we
-// pin it to the operator-configured storage origin (https by default).
-function checkImageUrl(imageUrl) {
-  const base = (process.env.R2_PUBLIC_BASE_URL || "").replace(/\/+$/, "");
-  if (!base) {
-    return {
-      ok: false,
-      error: "imageUrl requires R2_PUBLIC_BASE_URL to be configured",
-    };
-  }
-  let url;
-  let origin;
-  try {
-    url = new URL(imageUrl);
-    origin = new URL(base);
-  } catch {
-    return { ok: false, error: "invalid imageUrl" };
-  }
-  if (url.protocol !== "https:" && url.protocol !== "http:") {
-    return { ok: false, error: "imageUrl must be http(s)" };
-  }
-  if (url.origin !== origin.origin) {
-    return {
-      ok: false,
-      error: "imageUrl must be hosted by the configured storage origin",
-    };
-  }
-  return { ok: true };
-}
-
-async function fetchTagImage(url) {
-  const imageRes = await fetch(url, {
-    redirect: "manual",
-    signal: AbortSignal.timeout(10000),
-  });
-  if (!imageRes.ok) throw new Error("image reference fetch failed");
-  const type = imageRes.headers.get("content-type") || "";
-  if (!/^image\//i.test(type)) {
-    throw new Error("image reference is not an image");
-  }
-  if (imageRes.body) {
-    const reader = imageRes.body.getReader();
-    const chunks = [];
-    let total = 0;
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      total += value.byteLength;
-      if (total > MAX_TAG_IMAGE_BYTES)
-        throw new Error("image reference too large");
-      chunks.push(value);
-    }
-    return { mime: type, data: Buffer.concat(chunks).toString("base64") };
-  }
-  const buf = Buffer.from(await imageRes.arrayBuffer());
-  if (buf.byteLength > MAX_TAG_IMAGE_BYTES)
-    throw new Error("image reference too large");
-  return { mime: type, data: buf.toString("base64") };
-}
-
+// AI tagging now goes through the persistent queue (see aiQueue.js): enqueue a
+// single job and let the background worker pace it against Gemini's quota.
+// This endpoint stays for compatibility with the legacy per-image flow.
 app.post("/api/images/tag", RATE_TAG, async (req, res) => {
-  const { objectKey, thumbnail, mimeType, imageUrl, prompt } = req.body || {};
+  const { objectKey, prompt } = req.body || {};
 
   if (!objectKey || typeof objectKey !== "string" || objectKey.includes("\0")) {
     return res.status(400).json({ error: "objectKey is required" });
@@ -803,87 +754,312 @@ app.post("/api/images/tag", RATE_TAG, async (req, res) => {
       .status(500)
       .json({ error: "Gemini is not configured on the server" });
   }
-
-  let data = thumbnail;
-  let mime = mimeType || "image/jpeg";
-
-  if (!data && imageUrl) {
-    if (typeof imageUrl !== "string" || !checkImageUrl(imageUrl).ok) {
-      return res.status(400).json({ error: "invalid imageUrl" });
+  let p = null;
+  if (prompt !== undefined) {
+    if (typeof prompt !== "string" || prompt.length > 2000) {
+      return res.status(400).json({ error: "invalid prompt" });
     }
-    let fetched;
-    try {
-      fetched = await fetchTagImage(imageUrl);
-    } catch {
-      return res.status(502).json({ error: "failed to fetch image reference" });
-    }
-    mime = fetched.mime || mime;
-    data = fetched.data;
+    p = prompt.trim() || null;
   }
-
-  if (!data || typeof data !== "string") {
-    return res.status(400).json({ error: "thumbnail or imageUrl is required" });
-  }
-
-  const dataUrlMatch = data.match(/^data:([^;]+);base64,(.*)$/s);
-  if (dataUrlMatch) {
-    mime = dataUrlMatch[1];
-    data = dataUrlMatch[2];
-  }
-
-  const userPrompt =
-    typeof prompt === "string" && prompt.trim()
-      ? prompt.trim()
-      : DEFAULT_TAG_PROMPT;
 
   try {
-    const response = await ai.models.generateContent({
-      model: GEMINI_MODEL,
-      contents: [
-        { inlineData: { mimeType: mime, data } },
-        `${userPrompt}\nRespond ONLY with a JSON array of strings, e.g. ["tag1","tag2"].`,
-      ],
-    });
-
-    const tags = parseTags(response.text);
-    if (!tags) {
-      return res
-        .status(500)
-        .json({ error: "Gemini response was not a tag array" });
-    }
-
-    // Merge — never overwrite: keep existing tags, append the new AI tags,
-    // and dedupe case-insensitively so the stored set stays clean.
-    const current = await pool.query(
-      `SELECT tags FROM images WHERE object_key = $1 LIMIT 1`,
-      [objectKey],
-    );
-    if (current.rows.length === 0) {
-      return res.status(404).json({ error: "image not found" });
-    }
-    const merged = mergeTags(current.rows[0].tags, tags);
-
     const { rows } = await pool.query(
-      `UPDATE images SET tags = $1 WHERE object_key = $2
-       RETURNING id, object_key, original_filename, tags, created_at`,
-      [merged.join(" "), objectKey],
+      `INSERT INTO ai_jobs (object_key, prompt) VALUES ($1, $2)
+       RETURNING id, object_key, prompt, status, created_at`,
+      [objectKey, p],
+    );
+    res.status(201).json({ queued: true, jobId: rows[0].id, job: rows[0] });
+  } catch (err) {
+    console.error("Enqueue tag failed:", err.message);
+    res.status(500).json({ error: "failed to queue AI tagging" });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// AI control plane — status, queue management and config. Everything here is
+// JWT-guarded by the shared /api auth middleware.
+// ---------------------------------------------------------------------------
+
+app.get("/api/ai/status", async (_req, res) => {
+  try {
+    const [config, paused, rateLimit, queue] = await Promise.all([
+      getConfig(),
+      getPaused(),
+      getRateLimitStatus(),
+      getQueueCounts(),
+    ]);
+    res.json({
+      configured: isGeminiConfigured(),
+      model: GEMINI_MODEL,
+      paused,
+      config,
+      quota: {
+        usage: rateLimit.usage,
+        daily_limit: config.daily_limit,
+        rate_limited: rateLimit.rate_limited,
+        rate_limited_until: rateLimit.until
+          ? new Date(rateLimit.until).toISOString()
+          : null,
+        last_error: rateLimit.reason,
+      },
+      queue,
+    });
+  } catch (err) {
+    console.error("AI status failed:", err.message);
+    res.status(500).json({ error: "failed to read AI status" });
+  }
+});
+
+app.get("/api/ai/jobs", async (req, res) => {
+  const { status } = req.query;
+  const limit = Math.min(
+    Math.max(Number.parseInt(req.query.limit, 10) || 100, 1),
+    500,
+  );
+  const offset = Math.max(Number.parseInt(req.query.offset, 10) || 0, 0);
+  const params = [];
+  let where = "";
+  if (status) {
+    if (!VALID_STATUSES.includes(status)) {
+      return res.status(400).json({ error: "invalid status filter" });
+    }
+    params.push(status);
+    where = "WHERE j.status = $1";
+  }
+  params.push(limit, offset);
+  try {
+    const { rows } = await pool.query(
+      `SELECT j.id, j.object_key, j.prompt, j.status, j.attempts, j.result_tags,
+              j.error, j.created_at, j.started_at, j.finished_at,
+              i.original_filename
+       FROM ai_jobs j
+       LEFT JOIN images i ON i.object_key = j.object_key
+       ${where}
+       ORDER BY j.created_at DESC
+       LIMIT $${params.length - 1} OFFSET $${params.length}`,
+      params,
+    );
+    res.json(
+      rows.map((row) => ({
+        ...row,
+        thumb: thumbUrl(row.object_key),
+      })),
+    );
+  } catch (err) {
+    console.error("List AI jobs failed:", err.message);
+    res.status(500).json({ error: "failed to list AI jobs" });
+  }
+});
+
+app.post("/api/ai/jobs", RATE_AI_JOBS, async (req, res) => {
+  const { objectKeys, prompt } = req.body || {};
+  if (!validateKeyList(objectKeys)) {
+    return res
+      .status(400)
+      .json({ error: "objectKeys must be a non-empty list" });
+  }
+  let p = null;
+  if (prompt !== undefined) {
+    if (typeof prompt !== "string" || prompt.length > 2000) {
+      return res.status(400).json({ error: "invalid prompt" });
+    }
+    p = prompt.trim() || null;
+  }
+  try {
+    const unique = [...new Set(objectKeys)];
+    // Don't double-queue keys that are already waiting or running.
+    const { rows } = await pool.query(
+      `SELECT object_key FROM ai_jobs
+       WHERE object_key = ANY($1) AND status IN ('queued', 'running')`,
+      [unique],
+    );
+    const active = new Set(rows.map((r) => r.object_key));
+    const toInsert = unique.filter((k) => !active.has(k));
+    if (toInsert.length === 0) {
+      return res.json({ enqueued: 0, skipped: active.size, jobs: [] });
+    }
+    const values = [];
+    const tuples = toInsert
+      .map((k) => {
+        values.push(k, p);
+        return `($${values.length - 1}, $${values.length})`;
+      })
+      .join(", ");
+    const inserted = await pool.query(
+      `INSERT INTO ai_jobs (object_key, prompt) VALUES ${tuples}
+       RETURNING id, object_key, prompt, status, created_at`,
+      values,
+    );
+    res.status(201).json({
+      enqueued: inserted.rows.length,
+      skipped: active.size,
+      jobs: inserted.rows,
+    });
+  } catch (err) {
+    console.error("Enqueue AI jobs failed:", err.message);
+    res.status(500).json({ error: "failed to queue AI tagging" });
+  }
+});
+
+app.patch("/api/ai/jobs/:id", async (req, res) => {
+  const { id } = req.params;
+  const { status, prompt } = req.body || {};
+  if (status === "canceled") {
+    const check = await pool.query(`SELECT status FROM ai_jobs WHERE id = $1`, [
+      id,
+    ]);
+    if (check.rows.length === 0) {
+      return res.status(404).json({ error: "job not found" });
+    }
+    if (check.rows[0].status !== "queued") {
+      return res
+        .status(400)
+        .json({ error: "only waiting jobs can be canceled" });
+    }
+  }
+  const sets = [];
+  const values = [];
+  if (status !== undefined) {
+    if (status !== "queued" && status !== "canceled") {
+      return res
+        .status(400)
+        .json({ error: "status must be queued or canceled" });
+    }
+    values.push(status);
+    sets.push(`status = $${values.length}`);
+    if (status === "canceled") sets.push("finished_at = now()");
+  }
+  if (prompt !== undefined) {
+    if (typeof prompt !== "string" || prompt.length > 2000) {
+      return res.status(400).json({ error: "invalid prompt" });
+    }
+    values.push(prompt.trim() || null);
+    sets.push(`prompt = $${values.length}`);
+  }
+  if (sets.length === 0) {
+    return res.status(400).json({ error: "nothing to update" });
+  }
+  values.push(id);
+  try {
+    const { rows } = await pool.query(
+      `UPDATE ai_jobs SET ${sets.join(", ")} WHERE id = $${values.length}
+       RETURNING id, object_key, prompt, status, attempts, result_tags, error,
+                 created_at, started_at, finished_at`,
+      values,
+    );
+    if (rows.length === 0)
+      return res.status(404).json({ error: "job not found" });
+    res.json(rows[0]);
+  } catch (err) {
+    console.error("Update AI job failed:", err.message);
+    res.status(500).json({ error: "failed to update job" });
+  }
+});
+
+app.post("/api/ai/jobs/:id/retry", async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `UPDATE ai_jobs SET status = 'queued', error = '', finished_at = NULL
+       WHERE id = $1 AND status IN ('failed', 'canceled')
+       RETURNING id, object_key, prompt, status, attempts, result_tags, error, created_at`,
+      [req.params.id],
     );
     if (rows.length === 0) {
-      return res.status(404).json({ error: "image not found" });
+      return res.status(404).json({ error: "job not found or not retryable" });
     }
-
-    res.json({ objectKey, tags, image: rows[0] });
+    res.json(rows[0]);
   } catch (err) {
-    console.error("AI tagging failed:", err.message);
-    const raw = String(err?.message || "AI tagging failed");
-    const status =
-      err?.status && Number.isInteger(err.status) && err.status >= 400
-        ? err.status
-        : 500;
-    res.status(status).json({
-      error: raw.slice(0, 300) || "AI tagging failed",
-      retryable: status >= 429 || /busy|high demand|overloaded|rate/i.test(raw),
-    });
+    console.error("Retry AI job failed:", err.message);
+    res.status(500).json({ error: "failed to retry job" });
+  }
+});
+
+app.post("/api/ai/jobs/retry-failed", async (_req, res) => {
+  try {
+    const { rowCount } = await pool.query(
+      `UPDATE ai_jobs SET status = 'queued', error = '', finished_at = NULL
+       WHERE status = 'failed'`,
+    );
+    res.json({ requeued: rowCount });
+  } catch (err) {
+    console.error("Retry failed jobs failed:", err.message);
+    res.status(500).json({ error: "failed to retry failed jobs" });
+  }
+});
+
+app.post("/api/ai/jobs/cancel-all", async (_req, res) => {
+  try {
+    const { rowCount } = await pool.query(
+      `UPDATE ai_jobs SET status = 'canceled', finished_at = now()
+       WHERE status = 'queued'`,
+    );
+    res.json({ canceled: rowCount });
+  } catch (err) {
+    console.error("Cancel all failed:", err.message);
+    res.status(500).json({ error: "failed to cancel jobs" });
+  }
+});
+
+app.delete("/api/ai/jobs/:id", async (req, res) => {
+  try {
+    const { rowCount } = await pool.query(
+      `DELETE FROM ai_jobs WHERE id = $1 AND status IN ('done', 'failed', 'canceled')`,
+      [req.params.id],
+    );
+    if (rowCount === 0) {
+      return res
+        .status(400)
+        .json({ error: "only finished jobs can be deleted" });
+    }
+    res.json({ deleted: rowCount });
+  } catch (err) {
+    console.error("Delete AI job failed:", err.message);
+    res.status(500).json({ error: "failed to delete job" });
+  }
+});
+
+app.get("/api/ai/config", async (_req, res) => {
+  try {
+    const [config, paused] = await Promise.all([getConfig(), getPaused()]);
+    res.json({ config, paused });
+  } catch (err) {
+    console.error("Get AI config failed:", err.message);
+    res.status(500).json({ error: "failed to read AI config" });
+  }
+});
+
+app.patch("/api/ai/config", async (req, res) => {
+  const { master_prompt, min_interval_ms, daily_limit, paused } =
+    req.body || {};
+  const patch = {};
+  if (master_prompt !== undefined) {
+    if (typeof master_prompt !== "string" || master_prompt.length > 2000) {
+      return res.status(400).json({ error: "invalid master_prompt" });
+    }
+    patch.master_prompt =
+      master_prompt.trim() || "Give me 5 descriptive keywords for this image.";
+  }
+  if (min_interval_ms !== undefined) {
+    const n = Number(min_interval_ms);
+    if (!Number.isFinite(n) || n < 0 || n > 600_000) {
+      return res.status(400).json({ error: "invalid min_interval_ms" });
+    }
+    patch.min_interval_ms = Math.floor(n);
+  }
+  if (daily_limit !== undefined) {
+    const n = Number(daily_limit);
+    if (!Number.isFinite(n) || n < 1 || n > 100_000) {
+      return res.status(400).json({ error: "invalid daily_limit" });
+    }
+    patch.daily_limit = Math.floor(n);
+  }
+  try {
+    if (paused !== undefined) await setPaused(Boolean(paused));
+    const config = await setConfig(patch);
+    res.json({ config, paused: await getPaused() });
+  } catch (err) {
+    console.error("Update AI config failed:", err.message);
+    res.status(500).json({ error: "failed to update AI config" });
   }
 });
 
