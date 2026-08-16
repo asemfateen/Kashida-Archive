@@ -46,64 +46,68 @@ export default function Taskbar({
   };
 
   return (
-    <nav className="bg-surface-container-lowest border-b border-outline-variant z-50 shrink-0">
-      <div className="flex justify-between items-center w-full px-margin-page py-unit h-16">
-        <div className="flex items-center gap-gutter w-[320px]">
-          <Link
-            to="/"
-            className="font-headline-md text-headline-md text-primary tracking-tight font-semibold hover:opacity-90 transition-opacity"
-            title="Home"
-          >
-            Kashida Archive
-          </Link>
-        </div>
-        <div className="flex-1 max-w-2xl mx-4">
-          <form className="relative w-full group" onSubmit={submit}>
-            <span className="material-symbols-outlined absolute left-3 top-1/2 transform -translate-y-1/2 text-on-surface-variant pointer-events-none">
+    <header className="w-full h-20 bg-surface-container flex justify-between items-center px-margin-page sticky top-0 z-50 shrink-0">
+      <div className="flex items-center gap-4 w-1/4">
+        <Link
+          to="/"
+          className="text-2xl font-bold text-midnight-ink tracking-tight hover:opacity-90 transition-opacity"
+          title="Home"
+        >
+          Kashida Archive
+        </Link>
+      </div>
+      <div className="flex-1 max-w-2xl px-4 flex justify-center">
+        <form className="relative w-full max-w-xl" onSubmit={submit}>
+          <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+            <span className="material-symbols-outlined text-gray-400">
               search
             </span>
-            <input
-              ref={searchRef}
-              value={query}
-              onChange={(e) => onChange(e.target.value)}
-              className="w-full bg-surface-container-low border border-transparent focus:bg-surface-container-lowest focus:border-tertiary-container focus:ring-1 focus:ring-tertiary-container rounded-xl pl-10 pr-24 py-2.5 font-body-md text-body-md text-on-surface transition-colors placeholder-on-surface-variant outline-none"
-              placeholder="Search archive... (Cmd+K)"
-              type="text"
-            />
+          </div>
+          <input
+            ref={searchRef}
+            value={query}
+            onChange={(e) => onChange(e.target.value)}
+            className="block w-full pl-12 pr-24 py-3.5 border-none leading-5 bg-white shadow-soft placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-midnight-ink/20 rounded-full font-body-md text-body-md text-on-surface transition duration-200 ease-in-out"
+            placeholder="Search archive... (Cmd+K)"
+            type="text"
+          />
+          <div className="absolute inset-y-0 right-0 pr-2 flex items-center">
             <button
               type="submit"
-              className="absolute right-2 top-1/2 transform -translate-y-1/2 bg-tertiary text-on-tertiary font-label-caps text-label-caps px-3 py-1.5 rounded-lg hover:bg-tertiary-container transition-colors"
+              className="bg-midnight-ink text-white text-sm px-5 py-2 font-medium hover:bg-prussian-navy transition-colors rounded-full shadow-sm"
             >
               Search
             </button>
-          </form>
-        </div>
-        <div className="flex items-center gap-4 w-[320px] justify-end">
-          <button
-            onClick={onUpload}
-            className="flex items-center gap-2 text-on-surface-variant hover:text-primary transition-colors font-label-caps text-label-caps"
-            title="Upload"
-          >
-            <span className="material-symbols-outlined">upload</span>
-            Upload
-          </button>
-          <button
-            onClick={onSettings}
-            className="flex items-center gap-2 text-on-surface-variant hover:text-primary transition-colors font-label-caps text-label-caps"
-            title="Settings"
-          >
-            <span className="material-symbols-outlined">settings</span>
-            Settings
-          </button>
-          <button
-            onClick={() => navigate("/profile")}
-            className="hover:opacity-85 transition-opacity rounded-full"
-            title="Profile"
-          >
-            <Avatar />
-          </button>
-        </div>
+          </div>
+        </form>
       </div>
-    </nav>
+      <div className="flex items-center gap-4 w-1/4 justify-end">
+        <button
+          onClick={onUpload}
+          className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-midnight-ink bg-white/50 hover:bg-white transition-colors cursor-pointer active:scale-95 rounded-full shadow-sm"
+          title="Upload"
+        >
+          <span className="material-symbols-outlined text-[18px]">upload</span>
+          Upload
+        </button>
+        <button
+          onClick={onSettings}
+          className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-midnight-ink bg-white/50 hover:bg-white transition-colors cursor-pointer active:scale-95 rounded-full shadow-sm"
+          title="Settings"
+        >
+          <span className="material-symbols-outlined text-[18px]">
+            settings
+          </span>
+          Settings
+        </button>
+        <button
+          onClick={() => navigate("/profile")}
+          className="hover:opacity-85 transition-opacity rounded-full"
+          title="Profile"
+        >
+          <Avatar />
+        </button>
+      </div>
+    </header>
   );
 }

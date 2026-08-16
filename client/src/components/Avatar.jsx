@@ -1,7 +1,7 @@
-export default function Avatar({ size = 32 }) {
+export default function Avatar({ size = 40 }) {
   return (
     <div
-      className="rounded-full border border-outline-variant overflow-hidden flex items-center justify-center bg-gradient-to-br from-primary-container to-tertiary-container text-primary shrink-0"
+      className="rounded-full bg-midnight-ink flex items-center justify-center text-white hover:bg-prussian-navy transition-colors shadow-sm shrink-0"
       style={{ width: size, height: size }}
       title="Photo Editor"
     >

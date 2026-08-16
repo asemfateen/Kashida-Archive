@@ -321,32 +321,38 @@ function Shell() {
       go(VIEW_PATH.upload);
       return;
     }
+    if (key === "collections") {
+      go(VIEW_PATH.collections);
+      return;
+    }
     setFilter(key);
     if (view !== "dashboard") go(VIEW_PATH.dashboard);
   };
 
   return (
-    <div className="h-screen w-screen flex flex-col overflow-hidden bg-background text-on-surface font-body-md text-body-md">
+    <div className="h-screen w-screen flex flex-col overflow-hidden bg-surface-container text-on-surface font-body-md text-body-md">
       <Taskbar
         onSearch={openSearch}
         onSettings={() => go(VIEW_PATH.settings)}
         onUpload={() => go(VIEW_PATH.upload)}
         searchQuery={searchQuery}
       />
-      <div className="flex-1 flex flex-col overflow-hidden">
-        <div className="flex flex-1 overflow-hidden">
+      <div className="flex-1 flex flex-col overflow-hidden px-4 pb-4">
+        <div className="flex flex-1 overflow-hidden gap-3">
           <SidePanel
             activeKey={
               view === "upload"
                 ? "upload"
-                : view === "dashboard"
-                  ? filter
-                  : null
+                : view === "collections"
+                  ? "collections"
+                  : view === "dashboard"
+                    ? filter
+                    : null
             }
             onNavigate={handleNav}
             onSettings={() => go(VIEW_PATH.settings)}
           />
-          <div className="flex-1 flex flex-col overflow-hidden">
+          <div className="flex-1 flex flex-col overflow-hidden bg-white rounded-[2rem] shadow-soft border border-black/5">
             {view === "dashboard" && (
               <Dashboard
                 images={images}
@@ -481,7 +487,7 @@ function ProfileShell() {
   const [searchParams] = useSearchParams();
   const searchQuery = searchParams.get("q") || "";
   return (
-    <div className="h-screen w-screen flex flex-col overflow-hidden bg-background text-on-surface font-body-md text-body-md">
+    <div className="h-screen w-screen flex flex-col overflow-hidden bg-surface-container text-on-surface font-body-md text-body-md">
       <Taskbar
         onSearch={(q) => {
           if (q) navigate(`/?q=${encodeURIComponent(q)}`, { replace: true });
@@ -491,8 +497,8 @@ function ProfileShell() {
         onUpload={() => go("/upload")}
         searchQuery={searchQuery}
       />
-      <div className="flex-1 flex flex-col overflow-hidden">
-        <div className="flex flex-1 overflow-hidden">
+      <div className="flex-1 flex flex-col overflow-hidden px-4 pb-4">
+        <div className="flex flex-1 overflow-hidden gap-3">
           <SidePanel
             activeKey={null}
             onNavigate={(key) => {
@@ -501,7 +507,7 @@ function ProfileShell() {
             }}
             onSettings={() => go("/settings")}
           />
-          <div className="flex-1 flex flex-col overflow-hidden">
+          <div className="flex-1 flex flex-col overflow-hidden bg-white rounded-[2rem] shadow-soft border border-black/5">
             <Profile />
           </div>
         </div>

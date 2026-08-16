@@ -1,112 +1,93 @@
 import { useState } from "react";
 
-const NAV_ITEM_BASE =
-  "flex items-center gap-gutter text-on-surface-variant px-4 py-3 hover:bg-surface-container-highest transition-all rounded-xl font-label-caps text-label-caps translate-x-1 hover:translate-x-0";
-const NAV_ITEM_COLLAPSED =
-  "flex items-center gap-gutter text-on-surface-variant hover:bg-surface-container-highest transition-all rounded-xl font-label-caps text-label-caps justify-center px-0";
-
-const NAV_ACTIVE_BASE =
-  "flex items-center gap-gutter bg-surface-container-high text-primary rounded-xl px-4 py-3 transition-all translate-x-1 font-label-caps text-label-caps";
-const NAV_ACTIVE_COLLAPSED =
-  "flex items-center gap-gutter bg-surface-container-high text-primary rounded-xl py-3 transition-all font-label-caps text-label-caps justify-center px-0";
-
 const NAV_ITEMS = [
-  { key: "all", icon: "photo_library", label: "All Photos", fill: true },
-  { key: "recent", icon: "schedule", label: "Recent", fill: false },
-  { key: "favorites", icon: "star", label: "Favorites", fill: false },
-  { key: "trash", icon: "delete", label: "Trash", fill: false },
-  { key: "upload", icon: "cloud_upload", label: "Uploads", fill: false },
+  { key: "all", icon: "grid_view", label: "Gallery" },
+  { key: "recent", icon: "history", label: "Activity" },
+  { key: "favorites", icon: "star", label: "Favorites" },
+  { key: "trash", icon: "delete", label: "Trash" },
+  { key: "upload", icon: "cloud", label: "Cloud" },
 ];
 
+const RAIL_BUTTON =
+  "h-12 flex items-center gap-3 transition-all duration-200 cursor-pointer rounded-2xl";
+
 export default function SidePanel({ activeKey, onNavigate, onSettings }) {
-  const [collapsed, setCollapsed] = useState(
-    () => localStorage.getItem("kashida_sidebar_collapsed") === "1",
-  );
+  const [expanded, setExpanded] = useState(false);
 
-  const toggle = () => {
-    setCollapsed((prev) => {
-      localStorage.setItem("kashida_sidebar_collapsed", prev ? "0" : "1");
-      return !prev;
-    });
-  };
-
-  const navClass = (isActive) =>
-    isActive
-      ? collapsed
-        ? NAV_ACTIVE_COLLAPSED
-        : NAV_ACTIVE_BASE
-      : collapsed
-        ? NAV_ITEM_COLLAPSED
-        : NAV_ITEM_BASE;
+  const itemClass = (active) =>
+    `${RAIL_BUTTON} ${
+      expanded ? "w-full px-3" : "w-12 mx-auto justify-center"
+    } ${
+      active
+        ? "bg-midnight-ink text-white shadow-sm"
+        : "text-on-surface-variant bg-white/40 hover:bg-white hover:text-midnight-ink shadow-sm active:scale-95"
+    }`;
 
   return (
-    <aside
-      className={`bg-surface-container-low border-r border-outline-variant flex flex-col p-4 transition-all duration-200 ease-in-out overflow-hidden ${
-        collapsed ? "w-[76px]" : "w-panel-width-fixed"
+    <nav
+      className={`bg-transparent flex flex-col py-6 shrink-0 z-40 transition-all duration-200 ease-in-out ${
+        expanded ? "w-64" : "w-panel-width"
       }`}
     >
       <div
-        className={`mb-6 flex items-center ${
-          collapsed ? "justify-center" : "justify-between"
+        className={`flex items-center mb-8 ${
+          expanded ? "justify-between px-3" : "justify-center"
         }`}
       >
-        {!collapsed && (
-          <div>
-            <h2 className="font-headline-md text-headline-md text-primary">
-              Library
-            </h2>
-            <p className="font-body-sm text-body-sm text-on-surface-variant">
-              Visual Assets
-            </p>
-          </div>
-        )}
         <button
-          onClick={toggle}
-          title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          className="w-8 h-8 flex items-center justify-center rounded hover:bg-surface-container-highest text-on-surface-variant transition-colors shrink-0"
+          onClick={() => setExpanded((v) => !v)}
+          className="p-3 text-midnight-ink bg-white shadow-soft hover:bg-gray-50 transition-colors cursor-pointer active:scale-95 rounded-2xl"
+          title={expanded ? "Collapse menu" : "Expand menu"}
+          aria-label={expanded ? "Collapse menu" : "Expand menu"}
         >
-          <span className="material-symbols-outlined text-[20px]">
-            {collapsed ? "menu" : "menu_open"}
+          <span className="material-symbols-outlined">
+            {expanded ? "chevron_left" : "menu"}
           </span>
         </button>
+        {expanded && (
+          <span className="text-sm font-semibold text-midnight-ink">Menu</span>
+        )}
       </div>
-      <nav
-        className={`flex-1 flex flex-col font-label-caps text-label-caps ${
-          collapsed ? "gap-3" : "gap-1"
-        }`}
-      >
-        {NAV_ITEMS.map((item) => (
-          <button
-            key={item.key}
-            onClick={() => onNavigate(item.key)}
-            title={collapsed ? item.label : undefined}
-            className={navClass(activeKey === item.key)}
-          >
-            <span
-              className="material-symbols-outlined"
-              style={
-                item.fill ? { fontVariationSettings: "'FILL' 1" } : undefined
-              }
+      <div className={`flex flex-col gap-3 flex-1 ${expanded ? "px-3" : ""}`}>
+        {NAV_ITEMS.map((item) => {
+          const active = activeKey === item.key;
+          return (
+            <button
+              key={item.key}
+              onClick={() => onNavigate(item.key)}
+              title={item.label}
+              aria-label={item.label}
+              className={itemClass(active)}
             >
-              {item.icon}
-            </span>
-            {!collapsed && item.label}
-          </button>
-        ))}
-      </nav>
-      <div className="mt-auto pt-4 border-t border-outline-variant flex flex-col gap-1 font-label-caps text-label-caps">
+              <span className="material-symbols-outlined shrink-0">
+                {item.icon}
+              </span>
+              {expanded && (
+                <span className="text-sm font-medium whitespace-nowrap">
+                  {item.label}
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+      <div
+        className={`flex flex-col gap-3 pt-4 mt-auto ${expanded ? "px-3" : ""}`}
+      >
         <button
           onClick={onSettings}
-          title={collapsed ? "Settings" : undefined}
-          className={`flex items-center gap-gutter text-on-surface-variant px-4 py-3 hover:bg-surface-container-highest transition-all font-label-caps text-label-caps ${
-            collapsed ? "justify-center px-0" : ""
-          }`}
+          title="Settings"
+          aria-label="Settings"
+          className={itemClass(false)}
         >
-          <span className="material-symbols-outlined">settings</span>
-          {!collapsed && "Settings"}
+          <span className="material-symbols-outlined shrink-0">settings</span>
+          {expanded && (
+            <span className="text-sm font-medium whitespace-nowrap">
+              Settings
+            </span>
+          )}
         </button>
       </div>
-    </aside>
+    </nav>
   );
 }

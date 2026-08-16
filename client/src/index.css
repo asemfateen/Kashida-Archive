@@ -4,7 +4,7 @@
 
 .masonry-grid {
   column-count: 1;
-  column-gap: 12px;
+  column-gap: 32px;
 }
 @media (min-width: 640px) {
   .masonry-grid {
@@ -23,7 +23,7 @@
 }
 .masonry-item {
   break-inside: avoid;
-  margin-bottom: 12px;
+  margin-bottom: 32px;
 }
 
 .photo-card:hover .photo-metadata,

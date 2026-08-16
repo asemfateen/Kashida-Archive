@@ -26,15 +26,15 @@ export default function Login() {
   };
 
   return (
-    <div className="h-screen w-screen bg-background text-on-surface font-body-md text-body-md flex items-center justify-center p-4">
+    <div className="h-screen w-screen bg-surface-container text-on-surface font-body-md text-body-md flex items-center justify-center p-4">
       <div className="w-full max-w-sm">
         <div className="flex flex-col items-center mb-8">
-          <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-primary to-tertiary-container flex items-center justify-center mb-4">
+          <div className="w-14 h-14 rounded-2xl bg-midnight-ink flex items-center justify-center mb-4 shadow-soft">
             <span className="material-symbols-outlined text-on-primary text-3xl">
               photo_library
             </span>
           </div>
-          <h1 className="font-headline-md text-headline-md text-primary tracking-tight font-semibold">
+          <h1 className="text-2xl font-bold text-midnight-ink tracking-tight">
             Kashida Archive
           </h1>
           <p className="font-body-sm text-body-sm text-on-surface-variant mt-1">
@@ -44,7 +44,7 @@ export default function Login() {
 
         <form
           onSubmit={submit}
-          className="bg-surface-container-lowest border border-outline-variant rounded-xl p-6 flex flex-col gap-4"
+          className="bg-white border border-black/5 rounded-[2rem] shadow-soft p-8 flex flex-col gap-4"
         >
           <div className="flex flex-col gap-1.5">
             <label className="font-label-caps text-label-caps text-on-surface-variant">
@@ -55,7 +55,7 @@ export default function Login() {
               onChange={(e) => setUsername(e.target.value)}
               autoComplete="username"
               autoFocus
-              className="w-full bg-surface-container-low border border-outline-variant rounded-lg px-3 py-2.5 text-body-md text-on-surface focus:border-tertiary-container focus:ring-1 focus:ring-tertiary-container outline-none transition-colors"
+              className="w-full bg-surface-container-low border border-black/5 rounded-xl px-3 py-2.5 text-body-md text-on-surface focus:border-midnight-ink focus:ring-1 focus:ring-midnight-ink outline-none transition-colors"
               placeholder="admin"
               type="text"
             />
@@ -68,13 +68,13 @@ export default function Login() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               autoComplete="current-password"
-              className="w-full bg-surface-container-low border border-outline-variant rounded-lg px-3 py-2.5 text-body-md text-on-surface focus:border-tertiary-container focus:ring-1 focus:ring-tertiary-container outline-none transition-colors"
+              className="w-full bg-surface-container-low border border-black/5 rounded-xl px-3 py-2.5 text-body-md text-on-surface focus:border-midnight-ink focus:ring-1 focus:ring-midnight-ink outline-none transition-colors"
               type="password"
             />
           </div>
 
           {error && (
-            <p className="font-body-sm text-body-sm text-error bg-error-container/40 border border-error/30 rounded-lg px-3 py-2">
+            <p className="font-body-sm text-body-sm text-error bg-error/10 border border-error/30 rounded-xl px-3 py-2">
               {error}
             </p>
           )}
@@ -82,7 +82,7 @@ export default function Login() {
           <button
             type="submit"
             disabled={busy}
-            className="mt-1 bg-tertiary text-on-tertiary font-label-caps text-label-caps px-4 py-2.5 rounded-lg hover:bg-tertiary-container transition-colors disabled:opacity-60"
+            className="mt-1 bg-midnight-ink hover:bg-prussian-navy text-white font-label-caps text-label-caps px-4 py-2.5 rounded-full transition-colors disabled:opacity-60"
           >
             {busy ? "Signing in..." : "Sign In"}
           </button>
