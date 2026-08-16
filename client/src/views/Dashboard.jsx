@@ -27,8 +27,18 @@ export default function Dashboard({
   const [toast, setToast] = useState(null);
   const [selectMode, setSelectMode] = useState(false);
   const [selected, setSelected] = useState(() => new Set());
+  const [rightCollapsed, setRightCollapsed] = useState(
+    () => localStorage.getItem("kashida_right_panel_collapsed") === "1",
+  );
   const searchRef = useRef(null);
   const searchIdRef = useRef(0);
+
+  const toggleRight = () => {
+    setRightCollapsed((prev) => {
+      localStorage.setItem("kashida_right_panel_collapsed", prev ? "0" : "1");
+      return !prev;
+    });
+  };
 
   const toggleSelect = (key) => {
     setSelected((prev) => {
@@ -487,95 +497,160 @@ export default function Dashboard({
         </main>
 
         {/* Right Side Panel */}
-        <aside className="w-[320px] bg-surface-container-lowest border-l border-outline-variant flex flex-col p-4 overflow-y-auto shadow-[0px_10px_15px_rgba(0,0,0,0.05)]">
-          <div className="mb-6">
-            <h3 className="font-title-sm text-title-sm text-on-surface mb-4 border-b border-outline-variant pb-2">
-              Recent Tags
-            </h3>
-            <div className="flex flex-col gap-2">
-              {recentTags.map(([tag, n]) => (
-                <button
-                  key={tag}
-                  onClick={() => {
-                    setQuery(tag);
-                    runSearch(null, tag);
-                  }}
-                  className="group flex items-center justify-between p-2 rounded hover:bg-surface-container-low transition-colors cursor-pointer"
-                >
-                  <div className="flex items-center gap-2">
-                    <span className="material-symbols-outlined text-on-surface-variant text-[18px]">
-                      label
-                    </span>
-                    <span className="font-body-sm text-body-sm text-on-surface">
-                      {tag}
-                    </span>
-                  </div>
-                  <span className="font-mono-data text-mono-data text-on-surface-variant opacity-0 group-hover:opacity-100 transition-opacity">
-                    {n}
-                  </span>
-                </button>
-              ))}
-            </div>
-            {recentTags.length === 0 && (
-              <p className="font-body-sm text-body-sm text-on-surface-variant">
-                No tags yet — upload and AI-tag some images.
-              </p>
-            )}
-          </div>
-          <div className="mt-4">
-            <h3 className="font-title-sm text-title-sm text-on-surface mb-4 border-b border-outline-variant pb-2">
-              Quick Actions
-            </h3>
-            <div className="grid grid-cols-2 gap-2">
+        <aside
+          className={`bg-surface-container-lowest border-l border-outline-variant flex flex-col overflow-y-auto shadow-[0px_10px_15px_rgba(0,0,0,0.05)] transition-all duration-200 ease-in-out ${
+            rightCollapsed ? "w-[76px]" : "w-[320px]"
+          }`}
+        >
+          {rightCollapsed ? (
+            <div className="flex flex-col items-center gap-3 p-4">
+              <button
+                onClick={toggleRight}
+                title="Expand panel"
+                aria-label="Expand panel"
+                className="w-8 h-8 flex items-center justify-center rounded hover:bg-surface-container-low text-on-surface-variant transition-colors shrink-0"
+              >
+                <span className="material-symbols-outlined text-[20px]">
+                  chevron_left
+                </span>
+              </button>
+              <div className="w-6 border-t border-outline-variant"></div>
+              <button
+                onClick={() => setRightCollapsed(false)}
+                title="Recent Tags"
+                className="w-8 h-8 flex items-center justify-center rounded hover:bg-surface-container-low text-on-surface-variant transition-colors"
+              >
+                <span className="material-symbols-outlined text-[20px]">
+                  label
+                </span>
+              </button>
               <button
                 onClick={exportJson}
-                className="p-2 border border-outline-variant rounded flex flex-col items-center justify-center gap-1 hover:bg-surface-container-low transition-colors text-on-surface-variant"
                 title="Export current view as JSON"
+                className="w-8 h-8 flex items-center justify-center rounded hover:bg-surface-container-low text-on-surface-variant transition-colors"
               >
                 <span className="material-symbols-outlined text-[20px]">
                   file_download
                 </span>
-                <span className="font-label-caps text-label-caps">Export</span>
               </button>
               <button
                 onClick={shareLink}
-                className="p-2 border border-outline-variant rounded flex flex-col items-center justify-center gap-1 hover:bg-surface-container-low transition-colors text-on-surface-variant"
                 title="Copy share link"
+                className="w-8 h-8 flex items-center justify-center rounded hover:bg-surface-container-low text-on-surface-variant transition-colors"
               >
                 <span className="material-symbols-outlined text-[20px]">
                   share
                 </span>
-                <span className="font-label-caps text-label-caps">Share</span>
               </button>
             </div>
-          </div>
-          <div className="mt-4 pt-4 border-t border-outline-variant">
-            <label className="font-label-caps text-label-caps text-on-surface-variant block mb-1">
-              Quick-tag{" "}
-              {lastOpened
-                ? `(last opened: ${lastOpened.original_filename})`
-                : "(open an image first)"}
-            </label>
-            <form className="relative" onSubmit={handleQuickTag}>
-              <input
-                value={quickTag}
-                onChange={(e) => setQuickTag(e.target.value)}
-                disabled={!lastOpened}
-                className="w-full bg-surface-container-lowest border border-outline-variant focus:border-tertiary-container focus:ring-1 focus:ring-tertiary-container rounded p-2 font-body-sm text-body-sm text-on-surface outline-none disabled:opacity-50"
-                placeholder="Add tag..."
-                type="text"
-              />
-              <button
-                type="submit"
-                disabled={!lastOpened}
-                className="absolute right-2 top-1/2 transform -translate-y-1/2 text-tertiary-container disabled:opacity-50"
-              >
-                <span className="material-symbols-outlined text-[18px]">
-                  add
-                </span>
-              </button>
-            </form>
-          </div>
+          ) : (
+            <div className="p-4">
+              <div className="mb-6">
+                <div className="flex items-center justify-between mb-4 border-b border-outline-variant pb-2">
+                  <h3 className="font-title-sm text-title-sm text-on-surface">
+                    Recent Tags
+                  </h3>
+                  <button
+                    onClick={toggleRight}
+                    title="Collapse panel"
+                    aria-label="Collapse panel"
+                    className="w-8 h-8 flex items-center justify-center rounded hover:bg-surface-container-low text-on-surface-variant transition-colors shrink-0"
+                  >
+                    <span className="material-symbols-outlined text-[20px]">
+                      chevron_right
+                    </span>
+                  </button>
+                </div>
+                <div className="flex flex-col gap-2">
+                  {recentTags.map(([tag, n]) => (
+                    <button
+                      key={tag}
+                      onClick={() => {
+                        setQuery(tag);
+                        runSearch(null, tag);
+                      }}
+                      className="group flex items-center justify-between p-2 rounded hover:bg-surface-container-low transition-colors cursor-pointer"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="material-symbols-outlined text-on-surface-variant text-[18px]">
+                          label
+                        </span>
+                        <span className="font-body-sm text-body-sm text-on-surface">
+                          {tag}
+                        </span>
+                      </div>
+                      <span className="font-mono-data text-mono-data text-on-surface-variant opacity-0 group-hover:opacity-100 transition-opacity">
+                        {n}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+                {recentTags.length === 0 && (
+                  <p className="font-body-sm text-body-sm text-on-surface-variant">
+                    No tags yet — upload and AI-tag some images.
+                  </p>
+                )}
+              </div>
+              <div className="mt-4">
+                <h3 className="font-title-sm text-title-sm text-on-surface mb-4 border-b border-outline-variant pb-2">
+                  Quick Actions
+                </h3>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={exportJson}
+                    className="p-2 border border-outline-variant rounded flex flex-col items-center justify-center gap-1 hover:bg-surface-container-low transition-colors text-on-surface-variant"
+                    title="Export current view as JSON"
+                  >
+                    <span className="material-symbols-outlined text-[20px]">
+                      file_download
+                    </span>
+                    <span className="font-label-caps text-label-caps">
+                      Export
+                    </span>
+                  </button>
+                  <button
+                    onClick={shareLink}
+                    className="p-2 border border-outline-variant rounded flex flex-col items-center justify-center gap-1 hover:bg-surface-container-low transition-colors text-on-surface-variant"
+                    title="Copy share link"
+                  >
+                    <span className="material-symbols-outlined text-[20px]">
+                      share
+                    </span>
+                    <span className="font-label-caps text-label-caps">
+                      Share
+                    </span>
+                  </button>
+                </div>
+              </div>
+              <div className="mt-4 pt-4 border-t border-outline-variant">
+                <label className="font-label-caps text-label-caps text-on-surface-variant block mb-1">
+                  Quick-tag{" "}
+                  {lastOpened
+                    ? `(last opened: ${lastOpened.original_filename})`
+                    : "(open an image first)"}
+                </label>
+                <form className="relative" onSubmit={handleQuickTag}>
+                  <input
+                    value={quickTag}
+                    onChange={(e) => setQuickTag(e.target.value)}
+                    disabled={!lastOpened}
+                    className="w-full bg-surface-container-lowest border border-outline-variant focus:border-tertiary-container focus:ring-1 focus:ring-tertiary-container rounded p-2 font-body-sm text-body-sm text-on-surface outline-none disabled:opacity-50"
+                    placeholder="Add tag..."
+                    type="text"
+                  />
+                  <button
+                    type="submit"
+                    disabled={!lastOpened}
+                    className="absolute right-2 top-1/2 transform -translate-y-1/2 text-tertiary-container disabled:opacity-50"
+                  >
+                    <span className="material-symbols-outlined text-[18px]">
+                      add
+                    </span>
+                  </button>
+                </form>
+              </div>
+            </div>
+          )}
         </aside>
       </div>
 
