@@ -13,7 +13,6 @@ export default function Upload({ onUploaded }) {
   const [uploads, setUploads] = useState([]);
   const [dragging, setDragging] = useState(false);
   const inputRef = useRef(null);
-  const dirInputRef = useRef(null);
   const mounted = useRef(true);
 
   useEffect(() => {
@@ -129,32 +128,15 @@ export default function Upload({ onUploaded }) {
                   onClick={() => inputRef.current?.click()}
                   className="bg-surface-container-high text-primary font-label-caps text-label-caps px-6 py-2 rounded shadow-sm hover:bg-surface-variant transition-colors border border-outline-variant"
                 >
-                  Browse Files
-                </button>
-                <button
-                  onClick={() => dirInputRef.current?.click()}
-                  className="bg-tertiary text-on-tertiary font-label-caps text-label-caps px-6 py-2 rounded shadow-sm hover:bg-tertiary-container transition-colors"
-                >
-                  Upload a Folder
+                  Browse Files or Folder
                 </button>
               </div>
               <p className="font-body-sm text-body-sm text-on-surface-variant mt-3">
                 Pick a folder and every photo inside it (including subfolders)
-                uploads automatically.
+                uploads automatically — or drop files/folders here.
               </p>
               <input
                 ref={inputRef}
-                type="file"
-                multiple
-                accept="image/*,.heic,.tiff,.raw"
-                className="hidden"
-                onChange={(e) => {
-                  handleFiles(e.target.files);
-                  e.target.value = "";
-                }}
-              />
-              <input
-                ref={dirInputRef}
                 type="file"
                 multiple
                 webkitdirectory=""
