@@ -281,6 +281,66 @@ test("POST /api/images/batch updates multiple rows and validates input", async (
   assert.equal(badType.status, 400);
 });
 
+test("POST /api/images/batch-tag merges per row in one transaction", async () => {
+  const k1 = key("btag1");
+  const k2 = key("btag2");
+  await j("/api/images", {
+    method: "POST",
+    body: JSON.stringify({
+      objectKey: k1,
+      originalFilename: "t1.jpg",
+    }),
+  });
+  await j("/api/images", {
+    method: "POST",
+    body: JSON.stringify({
+      objectKey: k2,
+      originalFilename: "t2.jpg",
+    }),
+  });
+  await j(`/api/images/${encodeURIComponent(k1)}`, {
+    method: "PATCH",
+    body: JSON.stringify({ tags: "breaking news" }),
+  });
+  await j(`/api/images/${encodeURIComponent(k2)}`, {
+    method: "PATCH",
+    body: JSON.stringify({ tags: "sports" }),
+  });
+
+  const ok = await j("/api/images/batch-tag", {
+    method: "POST",
+    body: JSON.stringify({
+      objectKeys: [k1, k2],
+      tags: ["Breaking", "election"],
+    }),
+  });
+  assert.equal(ok.status, 200);
+  assert.equal(ok.body.updated, 2);
+
+  const all = await j("/api/images");
+  const byKey = new Map(all.body.map((i) => [i.object_key, i.tags]));
+  assert.equal(byKey.get(k1), "breaking news election");
+  assert.equal(byKey.get(k2), "sports Breaking election");
+
+  const noTags = await j("/api/images/batch-tag", {
+    method: "POST",
+    body: JSON.stringify({ objectKeys: [k1], tags: [] }),
+  });
+  assert.equal(noTags.status, 400);
+
+  const noKeys = await j("/api/images/batch-tag", {
+    method: "POST",
+    body: JSON.stringify({ objectKeys: [], tags: ["x"] }),
+  });
+  assert.equal(noKeys.status, 400);
+
+  const badTags = await j("/api/images/batch-tag", {
+    method: "POST",
+    body: JSON.stringify({ objectKeys: [k1], tags: "not-a-list" }),
+  });
+  assert.equal(badTags.status, 400);
+});
+
 test("POST /api/images/batch-delete hard-deletes rows and validates input", async () => {
   const k1 = key("batchdel1");
   const k2 = key("batchdel2");

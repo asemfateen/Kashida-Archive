@@ -14,6 +14,7 @@ import sharp from "sharp";
 import { r2, R2_BUCKET, isR2Configured } from "./r2.js";
 import pool from "./db.js";
 import { GEMINI_MODEL, isGeminiConfigured } from "./gemini.js";
+import { mergeTags } from "./tagParser.js";
 import initDb from "./initDb.js";
 import {
   getConfig,
@@ -459,6 +460,52 @@ app.post("/api/images/batch", async (req, res) => {
   } catch (err) {
     console.error("Batch update failed:", err.message);
     res.status(500).json({ error: "failed to update images" });
+  }
+});
+
+// Batch tag: merge tags server-side, per row, inside a single transaction.
+// Row locks serialize against the AI queue's concurrent writes so the merge
+// never clobbers tags the queue just saved, and one request replaces N
+// per-image PATCH round trips from the client.
+app.post("/api/images/batch-tag", async (req, res) => {
+  const { objectKeys, tags } = req.body || {};
+  if (!validateKeyList(objectKeys)) {
+    return res
+      .status(400)
+      .json({ error: "objectKeys must be a non-empty list" });
+  }
+  const incoming = Array.isArray(tags)
+    ? tags.map((t) => (typeof t === "string" ? t.trim() : "")).filter(Boolean)
+    : [];
+  if (incoming.length === 0) {
+    return res.status(400).json({ error: "tags must be a non-empty list" });
+  }
+  const joined = incoming.join(" ");
+  if (joined.length > 2000 || joined.includes("\0")) {
+    return res.status(400).json({ error: "invalid tags" });
+  }
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const { rows } = await client.query(
+      `SELECT object_key, tags FROM images WHERE object_key = ANY($1) FOR UPDATE`,
+      [objectKeys],
+    );
+    for (const row of rows) {
+      const merged = mergeTags(row.tags, incoming);
+      await client.query(`UPDATE images SET tags = $1 WHERE object_key = $2`, [
+        merged.join(" "),
+        row.object_key,
+      ]);
+    }
+    await client.query("COMMIT");
+    res.json({ updated: rows.length });
+  } catch (err) {
+    await client.query("ROLLBACK");
+    console.error("Batch tag failed:", err.message);
+    res.status(500).json({ error: "failed to tag images" });
+  } finally {
+    client.release();
   }
 });
 

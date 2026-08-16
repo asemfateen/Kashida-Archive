@@ -17,7 +17,6 @@ import Dashboard from "./views/Dashboard.jsx";
 import Upload from "./views/Upload.jsx";
 import Detail from "./views/Detail.jsx";
 import Search from "./views/Search.jsx";
-import Collections from "./views/Collections.jsx";
 import Settings from "./views/Settings.jsx";
 import Ai from "./views/Ai.jsx";
 import {
@@ -76,22 +75,13 @@ function clearCaches() {
   for (const key of keys) sessionStorage.removeItem(key);
 }
 
-const VIEWS = [
-  "dashboard",
-  "upload",
-  "detail",
-  "search",
-  "collections",
-  "settings",
-  "ai",
-];
+const VIEWS = ["dashboard", "upload", "detail", "search", "settings", "ai"];
 
 const VIEW_PATH = {
   dashboard: "/",
   upload: "/upload",
   detail: "/detail",
   search: "/search",
-  collections: "/collections",
   settings: "/settings",
   ai: "/ai",
 };
@@ -100,7 +90,6 @@ function pathToView(pathname) {
   if (pathname.startsWith("/upload")) return "upload";
   if (pathname.startsWith("/search")) return "search";
   if (pathname.startsWith("/detail")) return "detail";
-  if (pathname.startsWith("/collections")) return "collections";
   if (pathname.startsWith("/settings")) return "settings";
   if (pathname.startsWith("/ai")) return "ai";
   return "dashboard";
@@ -134,7 +123,6 @@ function Shell() {
   const [detailList, setDetailList] = useState(null);
   const [selectedIndex, setSelectedIndex] = useState(null);
   const [lastOpened, setLastOpened] = useState(null);
-  const [pendingBatch, setPendingBatch] = useState(null);
   const [detailFrom, setDetailFrom] = useState("/");
   const [loadError, setLoadError] = useState(null);
 
@@ -326,10 +314,6 @@ function Shell() {
       go(VIEW_PATH.upload);
       return;
     }
-    if (key === "collections") {
-      go(VIEW_PATH.collections);
-      return;
-    }
     if (key === "ai") {
       go(VIEW_PATH.ai);
       return;
@@ -352,13 +336,11 @@ function Shell() {
             activeKey={
               view === "upload"
                 ? "upload"
-                : view === "collections"
-                  ? "collections"
-                  : view === "ai"
-                    ? "ai"
-                    : view === "dashboard"
-                      ? filter
-                      : null
+                : view === "ai"
+                  ? "ai"
+                  : view === "dashboard"
+                    ? filter
+                    : null
             }
             onNavigate={handleNav}
             onSettings={() => go(VIEW_PATH.settings)}
@@ -438,20 +420,6 @@ function Shell() {
                 onUpload={() => go(VIEW_PATH.upload)}
                 onBack={() => goBack()}
                 onSettings={() => go(VIEW_PATH.settings)}
-                onBatch={(selected) => {
-                  setPendingBatch(selected);
-                  go(VIEW_PATH.collections);
-                }}
-              />
-            )}
-            {view === "collections" && (
-              <Collections
-                onBack={() => goBack()}
-                onOpenList={openList}
-                onUpload={() => go(VIEW_PATH.upload)}
-                onSettings={() => go(VIEW_PATH.settings)}
-                pendingBatch={pendingBatch}
-                onConsumedBatch={() => setPendingBatch(null)}
               />
             )}
             {view === "settings" && (

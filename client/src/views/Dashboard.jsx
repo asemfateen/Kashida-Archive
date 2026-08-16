@@ -2,12 +2,11 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   batchDelete,
+  batchTag,
   batchUpdate,
   enqueueAiJobs,
   searchImages,
-  updateImage,
 } from "../api.js";
-import { mergeTags } from "../tags.js";
 import { pushError } from "../notify.jsx";
 
 export default function Dashboard({
@@ -37,12 +36,15 @@ export default function Dashboard({
   const [tagModal, setTagModal] = useState(false);
   const [manualInput, setManualInput] = useState("");
   const [aiBusy, setAiBusy] = useState(false);
+  const [aiProgress, setAiProgress] = useState(null);
   const [tagFailures, setTagFailures] = useState([]);
   const [rightCollapsed, setRightCollapsed] = useState(
     () => localStorage.getItem("kashida_right_panel_collapsed") !== "0",
   );
   const searchRef = useRef(null);
   const searchIdRef = useRef(0);
+  const mountedRef = useRef(true);
+  const tagAbortRef = useRef(null);
   const navigate = useNavigate();
 
   const clearSearch = () => {
@@ -114,6 +116,15 @@ export default function Dashboard({
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  // Navigation during a batch tagging request must stop the in-flight call
+  // and the post-await setState so it never writes to an unmounted tree.
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false;
+      tagAbortRef.current?.abort();
+    };
+  }, []);
+
   const runSearch = async (e, forcedQuery) => {
     if (e) e.preventDefault();
     const q = (forcedQuery ?? query).trim();
@@ -169,6 +180,7 @@ export default function Dashboard({
     setTagModal(false);
     setManualInput("");
     setTagFailures([]);
+    setAiProgress(null);
   };
 
   const finishTagging = (okCount, failCount) => {
@@ -216,34 +228,49 @@ export default function Dashboard({
       .map((t) => t.trim().replace(/^#/, ""))
       .filter(Boolean);
 
+  const cancelManualTag = () => {
+    tagAbortRef.current?.abort();
+  };
+
   const runManualTag = async () => {
     const tags = parseManualTags(manualInput);
-    const items = selectedItems();
-    if (items.length === 0) return;
+    const keys = [...selected];
+    if (keys.length === 0) return;
     if (tags.length === 0) {
       pushError("Enter at least one tag first");
       return;
     }
     setAiBusy(true);
     setTagFailures([]);
-    let done = 0;
-    let failed = 0;
-    for (const item of items) {
-      const label = item.caption || item.original_filename || item.object_key;
-      try {
-        const merged = mergeTags(item.tags || "", tags);
-        await updateImage(item.object_key, { tags: merged.join(" ") });
-        done += 1;
-      } catch (err) {
-        failed += 1;
-        const msg = err?.message || "Could not save tags";
-        setTagFailures((prev) => [...prev, { label, message: msg }]);
-        pushError(`${label}: ${msg}`);
+    setAiProgress({ done: 0, total: keys.length });
+    const ctrl = new AbortController();
+    tagAbortRef.current = ctrl;
+    try {
+      const res = await batchTag(keys, tags, ctrl.signal);
+      if (!mountedRef.current) return;
+      clearSelection();
+      setTagModal(false);
+      setManualInput("");
+      finishTagging(res.updated ?? 0, keys.length - (res.updated ?? 0));
+    } catch (err) {
+      if (err?.name === "AbortError") {
+        if (mountedRef.current) showToast("Tagging cancelled");
+        return;
       }
+      setTagFailures([
+        {
+          label: "Batch tagging",
+          message: err?.message || "Could not save tags",
+        },
+      ]);
+      if (mountedRef.current) pushError(err?.message || "Could not save tags");
+    } finally {
+      if (mountedRef.current) {
+        setAiBusy(false);
+        setAiProgress(null);
+      }
+      tagAbortRef.current = null;
     }
-    setAiBusy(false);
-    setManualInput("");
-    finishTagging(done, failed);
   };
 
   const addQuickTag = (tag) => {
@@ -895,6 +922,22 @@ export default function Dashboard({
                 Watch and manage them in AI Control.
               </p>
             </div>
+
+            {aiBusy && aiProgress && (
+              <div className="flex items-center gap-2 font-body-sm text-body-sm text-on-surface-variant">
+                <span className="w-4 h-4 border-2 border-on-surface-variant/30 border-t-on-surface-variant rounded-full animate-spin shrink-0"></span>
+                <span className="flex-1">
+                  Tagging {aiProgress.total} photo
+                  {aiProgress.total === 1 ? "" : "s"}...
+                </span>
+                <button
+                  onClick={cancelManualTag}
+                  className="px-2.5 py-1 rounded-full bg-surface-container-low text-on-surface-variant text-xs font-medium hover:bg-error hover:text-on-error border border-black/5 transition-all"
+                >
+                  Cancel
+                </button>
+              </div>
+            )}
 
             <div className="h-px bg-black/5"></div>
 

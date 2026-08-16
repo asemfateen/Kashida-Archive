@@ -6,7 +6,6 @@ import {
   updateImage,
   deleteImage,
 } from "../api.js";
-import { collections } from "../store.js";
 import { pushError } from "../notify.jsx";
 
 const DEFAULT_PROMPT = "Give me 5 descriptive keywords for this image.";
@@ -33,55 +32,11 @@ export default function Detail({
   const [newTag, setNewTag] = useState("");
   const [saving, setSaving] = useState(false);
   const [zoom, setZoom] = useState(1);
-  const [collModal, setCollModal] = useState(false);
-  const [collectionsList, setCollectionsList] = useState([]);
-  const [newCollName, setNewCollName] = useState("");
-  const [collError, setCollError] = useState(null);
   const tagRef = useRef(null);
   const navRef = useRef(null);
   const keyRef = useRef(image.object_key);
 
   const src = image.url || image.src;
-
-  const openCollections = () => {
-    setCollectionsList(collections.list());
-    setNewCollName("");
-    setCollModal(true);
-  };
-
-  const inCollection = (coll) =>
-    coll.items.some((i) => i.key === image.object_key);
-
-  const toggleCollection = (coll) => {
-    const item = {
-      key: image.object_key,
-      url: image.url || image.src,
-      filename: image.original_filename,
-    };
-    const member = inCollection(coll);
-    const next = member
-      ? collections.removeItems(coll.id, [item.key])
-      : collections.addItems(coll.id, [item]);
-    setCollectionsList((prev) =>
-      prev.map((c) => (c.id === coll.id ? next : c)),
-    );
-    setCollError(null);
-  };
-
-  const createCollectionAndAdd = (e) => {
-    if (e) e.preventDefault();
-    const name = newCollName.trim();
-    if (!name) return;
-    const coll = collections.create(name, [
-      {
-        key: image.object_key,
-        url: image.url || image.src,
-        filename: image.original_filename,
-      },
-    ]);
-    setCollectionsList((prev) => [...prev, coll]);
-    setNewCollName("");
-  };
 
   useEffect(() => {
     keyRef.current = image.object_key;
@@ -109,7 +64,6 @@ export default function Detail({
       if (typing) return;
       if (e.key === "Escape") {
         setPromptModal(false);
-        setCollModal(false);
         return;
       }
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "t") {
@@ -378,22 +332,6 @@ export default function Detail({
             </button>
             <div className="w-px h-4 bg-black/10"></div>
             <button
-              onClick={openCollections}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-on-surface-variant hover:bg-surface-container-low hover:text-midnight-ink transition-colors"
-              title="Organize into collections"
-            >
-              <span
-                className="material-symbols-outlined"
-                style={{ fontSize: "20px" }}
-              >
-                auto_awesome_motion
-              </span>
-              <span className="font-label-caps text-label-caps">
-                Collection
-              </span>
-            </button>
-            <div className="w-px h-4 bg-black/10"></div>
-            <button
               onClick={handleDelete}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-on-surface-variant hover:bg-error-container hover:text-on-error-container transition-colors"
             >
@@ -521,89 +459,6 @@ export default function Detail({
           </section>
         </aside>
       </div>
-
-      {/* Add to Collection Modal */}
-      {collModal && (
-        <div
-          className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4"
-          onMouseDown={(e) => {
-            if (e.target === e.currentTarget) setCollModal(false);
-          }}
-        >
-          <div className="w-full max-w-md bg-white rounded-[2rem] shadow-soft border border-black/5 p-6">
-            <h3 className="text-lg font-bold text-midnight-ink tracking-tight mb-1">
-              Add to Collection
-            </h3>
-            <p className="font-body-sm text-body-sm text-on-surface-variant mb-4">
-              {image.original_filename}
-            </p>
-            {collError && (
-              <p className="font-body-sm text-body-sm text-error mb-2">
-                {collError}
-              </p>
-            )}
-            <div className="flex flex-col gap-2 max-h-56 overflow-y-auto mb-4">
-              {collectionsList.length === 0 && (
-                <p className="font-body-sm text-body-sm text-on-surface-variant">
-                  No collections yet — create one below.
-                </p>
-              )}
-              {collectionsList.map((coll) => {
-                const member = inCollection(coll);
-                return (
-                  <button
-                    key={coll.id}
-                    onClick={() => toggleCollection(coll)}
-                    className={`flex items-center justify-between p-2.5 rounded-xl border transition-colors ${
-                      member
-                        ? "bg-midnight-ink border-midnight-ink text-white"
-                        : "border-black/5 text-on-surface hover:bg-surface-container-low"
-                    }`}
-                  >
-                    <span className="flex items-center gap-2">
-                      <span className="material-symbols-outlined text-[20px]">
-                        auto_awesome_motion
-                      </span>
-                      <span className="font-body-sm text-body-sm">
-                        {coll.name}
-                      </span>
-                    </span>
-                    <span className="font-mono-data text-mono-data text-xs">
-                      {member ? "Added" : `${coll.items.length} items`}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-            <form onSubmit={createCollectionAndAdd} className="relative">
-              <input
-                value={newCollName}
-                onChange={(e) => setNewCollName(e.target.value)}
-                className="w-full bg-surface-container-low border border-black/5 rounded-xl px-3 py-2 text-body-sm text-on-surface focus:border-midnight-ink focus:ring-1 focus:ring-midnight-ink outline-none transition-colors pr-10"
-                placeholder="New collection name..."
-                type="text"
-              />
-              <button
-                type="submit"
-                className="absolute right-2 top-2 text-midnight-ink"
-                title="Create and add"
-              >
-                <span className="material-symbols-outlined text-[18px]">
-                  add
-                </span>
-              </button>
-            </form>
-            <div className="flex justify-end mt-4">
-              <button
-                onClick={() => setCollModal(false)}
-                className="px-4 py-2 rounded-full font-label-caps text-label-caps text-on-surface-variant border border-black/5 hover:bg-surface-container-low transition-colors"
-              >
-                Done
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Master Prompt Modal */}
       {promptModal && (

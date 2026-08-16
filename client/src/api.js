@@ -22,6 +22,21 @@ async function errMessage(res, fallback) {
   }
 }
 
+// Timeout-aware fetch. On expiry the request rejects with a real Error
+// ("Request timed out after ...") so callers can distinguish a hang from a
+// user-initiated AbortError. An external signal is still honored alongside
+// the timer via AbortSignal.any.
+export function http(url, opts = {}, timeoutMs = 15_000) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => {
+    ctrl.abort(new Error(`Request timed out after ${timeoutMs}ms`));
+  }, timeoutMs);
+  const signal = opts.signal
+    ? AbortSignal.any([opts.signal, ctrl.signal])
+    : ctrl.signal;
+  return fetch(url, { ...opts, signal }).finally(() => clearTimeout(timer));
+}
+
 export async function getUploadUrl(filename, contentType) {
   const res = await fetch("/api/upload-url", {
     method: "POST",
@@ -88,7 +103,7 @@ export async function getImage(objectKey) {
 }
 
 export async function updateImage(objectKey, patch) {
-  const res = await fetch(`/api/images/${encodeURIComponent(objectKey)}`, {
+  const res = await http(`/api/images/${encodeURIComponent(objectKey)}`, {
     method: "PATCH",
     headers: authHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify(patch),
@@ -137,6 +152,23 @@ export async function batchDelete(objectKeys) {
   });
   if (!res.ok)
     throw new Error(await errMessage(res, "failed to delete images"));
+  return res.json();
+}
+
+// Merge tags server-side across a key set in one transaction — a single
+// request replaces N per-image PATCH round trips.
+export async function batchTag(objectKeys, tags, signal) {
+  const res = await http(
+    "/api/images/batch-tag",
+    {
+      method: "POST",
+      headers: authHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({ objectKeys, tags }),
+      signal,
+    },
+    30_000,
+  );
+  if (!res.ok) throw new Error(await errMessage(res, "failed to tag images"));
   return res.json();
 }
 

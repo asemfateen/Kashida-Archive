@@ -14,6 +14,7 @@ const DEFAULT_DAILY_LIMIT = 20;
 const DEFAULT_MASTER_PROMPT = "Give me 5 descriptive keywords for this image.";
 const DRAIN_INTERVAL_MS = 3000;
 const MAX_COOLDOWN_MS = RATE_LIMIT_MEMORY_MS;
+const GEMINI_TIMEOUT_MS = 30_000;
 
 const VALID_STATUSES = ["queued", "running", "done", "failed", "canceled"];
 
@@ -169,7 +170,7 @@ function isRetryable(error) {
   const raw = String(error?.message || "");
   return (
     (error?.status && error.status >= 429) ||
-    /busy|high demand|overloaded|rate|quota|unavailable/i.test(raw)
+    /busy|high demand|overloaded|rate|quota|unavailable|timed?\s*out/i.test(raw)
   );
 }
 
@@ -184,13 +185,24 @@ async function processJob(job) {
     }
     const { mime, data } = await loadImageData(job.object_key);
     const prompt = job.prompt || (await getConfig()).master_prompt;
-    const response = await ai.models.generateContent({
-      model: GEMINI_MODEL,
-      contents: [
-        { inlineData: { mimeType: mime, data } },
-        `${prompt}\nRespond ONLY with a JSON array of strings, e.g. ["tag1","tag2"].`,
-      ],
-    });
+    // Bound the Gemini call: drain() is single-flight, so one hanging request
+    // would stall the whole queue. A timeout is retryable, so the job returns
+    // to queued and retries on the next tick instead of being marked failed.
+    const response = await Promise.race([
+      ai.models.generateContent({
+        model: GEMINI_MODEL,
+        contents: [
+          { inlineData: { mimeType: mime, data } },
+          `${prompt}\nRespond ONLY with a JSON array of strings, e.g. ["tag1","tag2"].`,
+        ],
+      }),
+      new Promise((_, reject) =>
+        setTimeout(
+          () => reject(new Error("Gemini request timed out")),
+          GEMINI_TIMEOUT_MS,
+        ),
+      ),
+    ]);
     const tags = parseTags(response.text);
     if (!tags) {
       throw new Error("Gemini response was not a tag array");

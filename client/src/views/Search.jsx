@@ -9,7 +9,6 @@ export default function Search({
   onUpload,
   onBack,
   onSettings,
-  onBatch,
 }) {
   const [currentQuery, setCurrentQuery] = useState("");
   const [terms, setTerms] = useState([]);
@@ -21,7 +20,6 @@ export default function Search({
   const [saveModal, setSaveModal] = useState(false);
   const [saveName, setSaveName] = useState("");
   const [toast, setToast] = useState(null);
-  const [selectedKeys, setSelectedKeys] = useState(new Set());
   const [favorites, setFavorites] = useState({});
   const searchIdRef = useRef(0);
   const lastQueryRef = useRef(null);
@@ -97,15 +95,6 @@ export default function Search({
     return "raw";
   };
 
-  const toggleSelect = (key) => {
-    setSelectedKeys((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
-  };
-
   const toggleFavorite = async (image, e) => {
     e.stopPropagation();
     try {
@@ -150,7 +139,6 @@ export default function Search({
   };
 
   const count = results === null ? 0 : results.length;
-  const selectedCount = selectedKeys.size;
 
   return (
     <>
