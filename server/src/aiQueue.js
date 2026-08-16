@@ -12,7 +12,6 @@ const RATE_LIMIT_MEMORY_MS = 60 * 60 * 1000;
 const DEFAULT_MIN_INTERVAL_MS = 1500;
 const DEFAULT_DAILY_LIMIT = 20;
 const DEFAULT_MASTER_PROMPT = "Give me 5 descriptive keywords for this image.";
-const MAX_ATTEMPTS = 3;
 const DRAIN_INTERVAL_MS = 3000;
 const MAX_COOLDOWN_MS = RATE_LIMIT_MEMORY_MS;
 
@@ -78,7 +77,20 @@ async function getQuota() {
 // only applies when a rate-limit error was observed within the last hour.
 export async function getRateLimitStatus() {
   const quota = await getQuota();
+  const cfg = await getConfig();
   const usage = typeof quota.count === "number" ? quota.count : 0;
+  const today = new Date().toISOString().slice(0, 10);
+  // Daily cap reached: pause until the day rolls over. Jobs stay queued and
+  // resume automatically when the cap resets.
+  if (quota.date === today && usage >= cfg.daily_limit) {
+    const until = new Date(`${today}T23:59:59.999Z`).getTime();
+    return {
+      rate_limited: true,
+      until,
+      reason: "daily quota reached",
+      usage,
+    };
+  }
   if (!quota.rateLimitedAt) {
     return { rate_limited: false, until: null, reason: null, usage };
   }
@@ -205,19 +217,13 @@ async function processJob(job) {
     console.error("AI tagging failed:", raw);
     if (isRetryable(err)) {
       await recordRateLimit(err);
-      // `job.attempts` is the pre-increment value; this attempt makes it
-      // job.attempts + 1, so fail once that reaches MAX_ATTEMPTS.
-      if (job.attempts + 1 >= MAX_ATTEMPTS) {
-        await pool.query(
-          `UPDATE ai_jobs SET status = 'failed', error = $1, finished_at = now() WHERE id = $2`,
-          [raw, job.id],
-        );
-      } else {
-        await pool.query(
-          `UPDATE ai_jobs SET status = 'queued', error = $1 WHERE id = $2`,
-          [raw, job.id],
-        );
-      }
+      // Rate-limited jobs stay queued: the queue pauses on the cooldown and
+      // they retry automatically once it clears (e.g. when the daily quota
+      // resets) instead of being marked failed.
+      await pool.query(
+        `UPDATE ai_jobs SET status = 'queued', error = $1 WHERE id = $2`,
+        [raw, job.id],
+      );
     } else {
       await pool.query(
         `UPDATE ai_jobs SET status = 'failed', error = $1, finished_at = now() WHERE id = $2`,
@@ -281,4 +287,4 @@ export async function getQueueCounts() {
   return counts;
 }
 
-export { VALID_STATUSES, MAX_ATTEMPTS, RATE_LIMIT_MEMORY_MS };
+export { VALID_STATUSES, RATE_LIMIT_MEMORY_MS };

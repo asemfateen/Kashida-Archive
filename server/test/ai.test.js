@@ -384,6 +384,32 @@ test("GET/PATCH /api/ai/config reads and updates settings", async () => {
   });
 });
 
+test("rate-limited jobs stay queued instead of failing", async () => {
+  const { getRateLimitStatus } = await import("../src/aiQueue.js");
+  const today = new Date().toISOString().slice(0, 10);
+
+  // Under the daily cap -> not rate limited.
+  await pool.query(
+    `INSERT INTO ai_state (key, value) VALUES ($1, $2::jsonb)
+     ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
+    ["quota", JSON.stringify({ date: today, count: 5 })],
+  );
+  assert.equal((await getRateLimitStatus()).rate_limited, false);
+
+  // At/over the daily cap -> rate limited until the day rolls over, so jobs
+  // pause and stay queued rather than burning attempts against a dead quota.
+  await pool.query(
+    `UPDATE ai_state SET value = $1::jsonb WHERE key = 'quota'`,
+    [JSON.stringify({ date: today, count: 20 })],
+  );
+  const over = await getRateLimitStatus();
+  assert.equal(over.rate_limited, true);
+  assert.equal(over.reason, "daily quota reached");
+
+  // Clean up the seeded state.
+  await pool.query(`DELETE FROM ai_state WHERE key = 'quota'`);
+});
+
 async function keyToId(objectKey) {
   const { rows } = await pool.query(
     `SELECT id FROM ai_jobs WHERE object_key = $1 LIMIT 1`,
