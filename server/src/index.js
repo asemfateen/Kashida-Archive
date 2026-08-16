@@ -1,7 +1,7 @@
 import "./env.js";
 import express from "express";
 import cors from "cors";
-import { randomUUID } from "node:crypto";
+import { randomUUID, createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
@@ -10,6 +10,7 @@ import {
   GetObjectCommand,
   DeleteObjectCommand,
 } from "@aws-sdk/client-s3";
+import sharp from "sharp";
 import { r2, R2_BUCKET, isR2Configured } from "./r2.js";
 import pool from "./db.js";
 import { ai, GEMINI_MODEL, isGeminiConfigured } from "./gemini.js";
@@ -118,7 +119,11 @@ app.use("/api", async (req, res, next) => {
 // image serve endpoint (images load in <img> tags which can't carry headers).
 app.use("/api", (req, res, next) => {
   if (req.path === "/health" || req.path === "/auth/login") return next();
-  if (req.path === "/images/serve" || req.path.startsWith("/images/serve/"))
+  if (
+    req.path === "/images/serve" ||
+    req.path.startsWith("/images/serve/") ||
+    req.path.startsWith("/images/thumb/")
+  )
     return next();
   return requireAuth(req, res, next);
 });
@@ -224,6 +229,14 @@ function publicUrl(publicBase, objectKey) {
   return `${publicBase}/${encoded}`;
 }
 
+function thumbUrl(objectKey) {
+  const encoded = objectKey
+    .split("/")
+    .map((part) => encodeURIComponent(part))
+    .join("/");
+  return `/api/images/thumb/${encoded}`;
+}
+
 app.get("/api/images", async (req, res) => {
   const view = req.query.view || "all";
   const publicBase = (process.env.R2_PUBLIC_BASE_URL || "").replace(/\/+$/, "");
@@ -242,6 +255,7 @@ app.get("/api/images", async (req, res) => {
       rows.map((row) => ({
         ...row,
         url: publicUrl(publicBase, row.object_key),
+        thumb: thumbUrl(row.object_key),
       })),
     );
   } catch (err) {
@@ -294,6 +308,92 @@ app.get("/api/images/serve/*", async (req, res) => {
   }
 });
 
+const THUMB_WIDTH = 420;
+const THUMB_QUALITY = 75;
+// Keyed by objectKey, dedupes concurrent requests for the same thumbnail so a
+// 200-photo grid doesn't resize the same file 200 times at once.
+const thumbJobs = new Map();
+
+function thumbObjectKey(objectKey) {
+  return `thumbs/${createHash("sha1").update(objectKey).digest("hex")}.webp`;
+}
+
+app.get("/api/images/thumb/*", async (req, res) => {
+  const objectKey = req.params[0];
+  if (!objectKey || objectKey.includes("\0")) {
+    return res.status(400).json({ error: "invalid objectKey" });
+  }
+  if (!isR2Configured()) {
+    return res.status(503).json({ error: "R2 is not configured" });
+  }
+  const thumbKey = thumbObjectKey(objectKey);
+  try {
+    const cached = await r2.send(
+      new GetObjectCommand({ Bucket: R2_BUCKET, Key: thumbKey }),
+    );
+    res.setHeader("Content-Type", "image/webp");
+    res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+    return cached.Body.pipe(res);
+  } catch {
+    // Thumbnail not generated yet — fall through and build it.
+  }
+
+  if (thumbJobs.has(objectKey)) {
+    return thumbJobs.get(objectKey).then(
+      (buf) => {
+        res.setHeader("Content-Type", "image/webp");
+        res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+        res.send(buf);
+      },
+      () => res.status(404).send("Not Found"),
+    );
+  }
+
+  const job = (async () => {
+    try {
+      const full = await r2.send(
+        new GetObjectCommand({ Bucket: R2_BUCKET, Key: objectKey }),
+      );
+      if (!full.Body) throw new Error("empty body");
+      const chunks = [];
+      for await (const chunk of full.Body) chunks.push(chunk);
+      const thumb = await sharp(Buffer.concat(chunks))
+        .rotate()
+        .resize(THUMB_WIDTH, THUMB_WIDTH, {
+          fit: "inside",
+          withoutEnlargement: true,
+        })
+        .webp({ quality: THUMB_QUALITY })
+        .toBuffer();
+      try {
+        await r2.send(
+          new PutObjectCommand({
+            Bucket: R2_BUCKET,
+            Key: thumbKey,
+            Body: thumb,
+            ContentType: "image/webp",
+          }),
+        );
+      } catch (putErr) {
+        console.error("Thumb store failed:", putErr.message);
+      }
+      return thumb;
+    } finally {
+      thumbJobs.delete(objectKey);
+    }
+  })();
+  thumbJobs.set(objectKey, job);
+  try {
+    const thumb = await job;
+    res.setHeader("Content-Type", "image/webp");
+    res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+    res.send(thumb);
+  } catch (err) {
+    console.error("Thumbnail generation failed:", err.message);
+    res.status(404).send("Not Found");
+  }
+});
+
 app.get("/api/images/:objectKey", async (req, res) => {
   const { objectKey } = req.params;
   if (objectKey.includes("\0")) {
@@ -312,7 +412,11 @@ app.get("/api/images/:objectKey", async (req, res) => {
       /\/+$/,
       "",
     );
-    res.json({ ...rows[0], url: publicUrl(publicBase, rows[0].object_key) });
+    res.json({
+      ...rows[0],
+      url: publicUrl(publicBase, rows[0].object_key),
+      thumb: thumbUrl(rows[0].object_key),
+    });
   } catch (err) {
     console.error("Get image failed:", err.message);
     res.status(500).json({ error: "failed to get image" });
@@ -497,6 +601,7 @@ app.get("/api/search", async (req, res) => {
       result.rows.map((row) => ({
         ...row,
         url: publicUrl(publicBase, row.object_key),
+        thumb: thumbUrl(row.object_key),
       })),
     );
   } catch (err) {
@@ -518,6 +623,7 @@ app.get("/api/search", async (req, res) => {
           result.rows.map((row) => ({
             ...row,
             url: publicUrl(publicBase, row.object_key),
+            thumb: thumbUrl(row.object_key),
           })),
         );
       } catch (fallbackErr) {

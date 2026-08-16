@@ -1,9 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { searchImages } from "../api.js";
 
-const DIMENSIONS = new Map();
-let measureQueued = {};
-
 export default function Dashboard({
   images,
   loading,
@@ -27,7 +24,6 @@ export default function Dashboard({
   const [searching, setSearching] = useState(false);
   const [quickTag, setQuickTag] = useState("");
   const [toast, setToast] = useState(null);
-  const [, setTick] = useState(0);
   const searchRef = useRef(null);
   const searchIdRef = useRef(0);
 
@@ -162,21 +158,10 @@ export default function Dashboard({
     .sort((a, b) => b[1] - a[1])
     .slice(0, 12);
 
-  const markMeasured = (src) => {
-    if (measureQueued[src] || DIMENSIONS.has(src)) return;
-    measureQueued[src] = true;
-    const img = new Image();
-    img.onload = () => {
-      DIMENSIONS.set(src, { w: img.naturalWidth, h: img.naturalHeight });
-      delete measureQueued[src];
-      setTick((t) => t + 1);
-    };
-    img.src = src;
-  };
-
   const normalize = (image) => ({
     ...image,
     src: image.url || image.src,
+    thumb: image.thumb || image.url || image.src,
     category:
       image.category || (image.tags || "").split(" ")[0]?.toUpperCase() || "",
     caption: image.caption || image.original_filename,
@@ -266,7 +251,7 @@ export default function Dashboard({
               {galleryItems.map((image) => {
                 const item = normalize(image);
                 const isTrash = activeFilter === "trash";
-                const src = item.src;
+                const src = item.thumb;
                 return (
                   <div
                     key={item.id || item.object_key}
@@ -286,7 +271,8 @@ export default function Dashboard({
                       className="w-full object-cover"
                       src={src}
                       alt={item.caption}
-                      onLoad={() => markMeasured(src)}
+                      loading="lazy"
+                      decoding="async"
                       onError={(e) => {
                         e.currentTarget.style.display = "none";
                         e.currentTarget.parentElement.classList.add(
