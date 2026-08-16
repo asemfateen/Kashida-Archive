@@ -71,7 +71,11 @@ export default function SidePanel({ activeKey, onNavigate, onSettings }) {
           </span>
         </button>
       </div>
-      <nav className="flex-1 flex flex-col gap-1 font-label-caps text-label-caps">
+      <nav
+        className={`flex-1 flex flex-col font-label-caps text-label-caps ${
+          collapsed ? "gap-3" : "gap-1"
+        }`}
+      >
         {NAV_ITEMS.map((item) => (
           <button
             key={item.key}
