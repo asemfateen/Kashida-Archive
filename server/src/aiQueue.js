@@ -327,10 +327,10 @@ async function drain() {
   try {
     if (await getPaused()) return;
 
-    // Periodically recover stuck running jobs (every drain cycle)
+    // Recover stuck running jobs (no updated_at on ai_jobs — use started_at)
     await pool.query(
       `UPDATE ai_jobs SET status = 'queued', error = 'recovered from stuck running'
-       WHERE status = 'running' AND updated_at < now() - interval '2 minutes'`,
+       WHERE status = 'running' AND started_at < now() - interval '2 minutes'`,
     );
 
     const rl = await getRateLimitStatus();
@@ -388,7 +388,7 @@ export async function startQueue() {
   try {
     const res = await pool.query(
       `UPDATE ai_jobs SET status = 'queued', error = 'recovered from stuck running'
-       WHERE status = 'running' AND updated_at < now() - interval '2 minutes'`,
+       WHERE status = 'running' AND started_at < now() - interval '2 minutes'`,
     );
     if (res.rowCount > 0) {
       console.log(`[aiQueue] recovered ${res.rowCount} stuck running job(s)`);
