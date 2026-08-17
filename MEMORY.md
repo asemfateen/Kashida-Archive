@@ -80,6 +80,7 @@ PORT, DATABASE_URL, R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BU
 - Seed images (design placeholders) are CORS-tainted → AI tagging on seed items falls back to imageUrl path, which needs a fetchable URL; real R2-hosted uploads work fully
 - object_key contains slashes (`seed/rally-downtown.jpg`) → API path params MUST be URL-encoded (client api.js already does encodeURIComponent)
 - Smart-archive DB container can stop on its own — `docker start smart-archive-db` before `npm run db:init` or dev
+- Credentials in server/.env are plaintext — should be moved to Railway env vars for production
 
 ## Run Instructions
 
@@ -87,6 +88,18 @@ PORT, DATABASE_URL, R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BU
 2. `server`: npm run dev → :3000 (set R2 + GEMINI creds in server/.env first)
 3. `client`: npm run dev → :5173
 
+## Security Fixes (Aug 2026)
+
+Full code audit completed. 6 fixes shipped in commit `f468eff`:
+1. Cancel-check DB error wrapped in try/catch (was crashing process)
+2. JWT_SECRET hardcoded fallback removed (production now requires env var)
+3. Login rate limiter: 10 attempts/min per IP on `POST /api/auth/login`
+4. `mergeTagsForImage()` uses `SELECT FOR UPDATE` row lock (prevents concurrent tag overwrite)
+5. Client 401 interceptor: `apiFetch()` wrapper auto-clears token + triggers logout on session expiry
+6. Security test for login rate limiting added (59/59 tests pass)
+
+Remaining (lower priority): move credentials from .env to Railway env vars, remove debug console.logs.
+
 ## Next Phase
 
-Faceted search shipped (server + client, 58/58 tests, live smoke-verified). NOT pushed to GitHub (user's Railway auto-deploys on push — only push when told). Optional follow-ups: batch AI tagging, R2 creds to go live with uploads, collections→DB persistence (currently localStorage), resume main-pc remote deploy (Tailscale offline when last attempted; partial state at ~/smart-image-archive on that host).
+Security audit complete + pushed. Faceted search + AI queue redesign shipped. Optional follow-ups: batch AI tagging, R2 creds to go live with uploads, collections→DB persistence (currently localStorage), move credentials to Railway env vars, resume main-pc remote deploy.
