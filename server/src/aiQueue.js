@@ -374,9 +374,23 @@ function scheduleDrain(ms) {
 // Public API
 // ---------------------------------------------------------------------------
 
-export function startQueue() {
+export async function startQueue() {
   if (process.env.AI_QUEUE === "false") return;
   if (drainTimer || !isGeminiConfigured()) return;
+
+  // Recover orphaned "running" jobs (stuck for >5 minutes, e.g. after deploy)
+  try {
+    const res = await pool.query(
+      `UPDATE ai_jobs SET status = 'queued', error = 'recovered from stuck running'
+       WHERE status = 'running' AND updated_at < now() - interval '5 minutes'`,
+    );
+    if (res.rowCount > 0) {
+      console.log(`[aiQueue] recovered ${res.rowCount} stuck running job(s)`);
+    }
+  } catch {
+    // DB not ready yet — will retry on next drain.
+  }
+
   drainTimer = setInterval(drain, 10_000);
   drainTimer.unref();
   drain();
