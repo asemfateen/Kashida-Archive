@@ -13,3 +13,4 @@ Thumbs.db
 
 # Local design-source artifacts (reference material for internal development)
 stitch_remix_of_newsroom_asset_index/
+.playwright-mcp/
