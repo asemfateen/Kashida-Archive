@@ -2,10 +2,15 @@
 
 ## Current Phase
 
-MVP COMPLETE (8 phases) + full-functionality pass DONE + LAYOUT/FIDELITY & CREATIVE SCREEN PASS DONE. All design views match the original HTML (dashboard/detail/search/upload), every control is functional, and 6 screens now exist (dashboard, upload, detail, search, collections, settings&help).
+MVP COMPLETE (8 phases) + full-functionality pass DONE + LAYOUT/FIDELITY & CREATIVE SCREEN PASS DONE. FACETED SEARCH DONE — implemented the CHI 2003 paper "Faceted Metadata for Image Search and Browsing" (Yee et al.): dynamic query previews, no-dead-ends, the Matrix sidebar, group-by-facet, endgame links with counts, keyword disambiguation. 6 screens (dashboard, upload, detail, search, collections, settings&help).
 
 ## Implemented Features
 
+- **Faceted search (Matrix)** — `GET /api/facets` returns Tag/Type/Date counts for any search context (shared `buildSearchContext(req)` WHERE builder powers both `/api/search` and `/api/facets`, so counts always annotate the exact result set — no dead-end links). Client `components/FacetPanel.jsx` renders the Matrix (hue-coded rows, active state, always-visible counts); Dashboard right panel + Search view both host it during an active query (Recent Tags still shows otherwise).
+- **Facet filters** — repeatable `tag` (`string_to_array(tags,' ') @> ARRAY[n]`, ANDed across tags), `type` (jpg incl. jpeg / png / raw), `dateFrom`/`dateTo` (ISO, dateTo exclusive) all AND on top of keyword search. Toggling re-fetches results + facets in lock-step.
+- **Group-by-facet** — client-side grouping of the ≤100 results (Tag/Type/Date) via "Group:" select on Dashboard + Search.
+- **Endgame links** — Detail tag chips navigate to `/?q=tag`; `GET /api/tags/count` (exact, library-wide, excludes soft-deleted) feeds count badges on each chip.
+- **Keyword disambiguation** — `GET /api/tags/suggest?q=` (prefix LIKE on lower(tags), `%_\` escaped, LIMIT 10); Taskbar shows a debounced dropdown under the input, clicking replaces the query.
 - **AI button** in Detail view's Tags header (deviation: design has no literal tabs section — bound next to the "Tags" label in the Metadata & Tagging panel, where the active image + tags live)
 - **Left-click**: canvas-downscales active image to ≤512px JPEG base64 → `POST /api/images/tag` with saved master prompt → tag chips update live; canvas taint (CORS) auto-falls back to server-side `imageUrl` fetch
 - **Right-click**: `preventDefault()` → modal to view/edit/save master prompt (persisted in localStorage, default "Give me 5 descriptive keywords for this image.")
@@ -84,4 +89,4 @@ PORT, DATABASE_URL, R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BU
 
 ## Next Phase
 
-None — MVP functional-complete + 6 screens. Optional follow-ups: batch AI tagging, R2 creds to go live with uploads, collections→DB persistence (currently localStorage), resume main-pc remote deploy (Tailscale offline when last attempted; partial state at ~/smart-image-archive on that host).
+Faceted search shipped (server + client, 58/58 tests, live smoke-verified). NOT pushed to GitHub (user's Railway auto-deploys on push — only push when told). Optional follow-ups: batch AI tagging, R2 creds to go live with uploads, collections→DB persistence (currently localStorage), resume main-pc remote deploy (Tailscale offline when last attempted; partial state at ~/smart-image-archive on that host).

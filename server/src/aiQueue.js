@@ -5,20 +5,41 @@ import { r2, R2_BUCKET, isR2Configured } from "./r2.js";
 import { ai, GEMINI_MODEL, isGeminiConfigured } from "./gemini.js";
 import { parseTags, mergeTags } from "./tagParser.js";
 
-// How long a rate-limit sighting stays "fresh". After an hour without a new
-// rate-limit error the queue considers itself clear and tries again, even if
-// Gemini might still reject it (which would re-arm the clock).
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
+
+// Gemini free-tier daily quota — generous ceiling. The queue paces itself
+// well below this via per-request intervals, but hitting it is a hard stop.
+const DEFAULT_DAILY_LIMIT = 50;
+
+// Minimum gap between successful Gemini calls (ms). Prevents burst spam
+// even when the queue has dozens of jobs.
+const DEFAULT_MIN_INTERVAL_MS = 4_000;
+
+// Starting cooldown after a rate-limit error. Doubles on each consecutive
+// failure, capped at MAX_COOLDOWN_MS. Reset to BASE on any success.
+const BASE_COOLDOWN_MS = 30_000;
+const MAX_COOLDOWN_MS = 15 * 60_000; // 15 minutes
+
+
+
+// How long a rate-limit observation stays "fresh". After an hour with no new
+// errors the cooldown is cleared — even if Gemini might still reject
+// (which would re-arm the clock). Keeps the system from being permanently
+// stuck after a transient spike.
 const RATE_LIMIT_MEMORY_MS = 60 * 60 * 1000;
-const DEFAULT_MIN_INTERVAL_MS = 1500;
-const DEFAULT_DAILY_LIMIT = 20;
-const DEFAULT_MASTER_PROMPT = "Give me 5 descriptive keywords for this image.";
-const DRAIN_INTERVAL_MS = 3000;
-const MAX_COOLDOWN_MS = RATE_LIMIT_MEMORY_MS;
+
 const GEMINI_TIMEOUT_MS = 30_000;
 
 const VALID_STATUSES = ["queued", "running", "done", "failed", "canceled"];
 
+// ---------------------------------------------------------------------------
+// State helpers (ai_state KV table)
+// ---------------------------------------------------------------------------
+
 let drainTimer = null;
+let activeTimeout = null;
 
 async function getState(key, fallback) {
   try {
@@ -28,9 +49,6 @@ async function getState(key, fallback) {
     );
     if (rows.length === 0) return fallback;
     const value = rows[0].value;
-    // pg already parses JSONB columns into JS values; only parse when the
-    // driver hands us a string, otherwise JSON.parse(object) throws and the
-    // stored state would silently read back as the fallback every time.
     return typeof value === "string" ? JSON.parse(value) : value;
   } catch {
     return fallback;
@@ -45,10 +63,14 @@ async function setState(key, value) {
   );
 }
 
+// ---------------------------------------------------------------------------
+// Config
+// ---------------------------------------------------------------------------
+
 export async function getConfig() {
   const cfg = await getState("config", {});
   return {
-    master_prompt: DEFAULT_MASTER_PROMPT,
+    master_prompt: "Give me 5 descriptive keywords for this image.",
     min_interval_ms: DEFAULT_MIN_INTERVAL_MS,
     daily_limit: DEFAULT_DAILY_LIMIT,
     ...cfg,
@@ -61,6 +83,10 @@ export async function setConfig(patch) {
   return next;
 }
 
+// ---------------------------------------------------------------------------
+// Pause
+// ---------------------------------------------------------------------------
+
 export async function getPaused() {
   return (await getState("paused", false)) === true;
 }
@@ -70,68 +96,105 @@ export async function setPaused(value) {
   return Boolean(value);
 }
 
+// ---------------------------------------------------------------------------
+// Rate-limit / quota tracking
+//
+// Separate keys: "quota" for daily usage + cooldown, "cooldown" for the
+// backoff state. This avoids the old bug where bumpUsage() would overwrite
+// cooldown fields.
+// ---------------------------------------------------------------------------
+
 async function getQuota() {
   return await getState("quota", {});
 }
 
-// Current rate-limit status. The 1-hour freshness rule: a remembered pause
-// only applies when a rate-limit error was observed within the last hour.
+async function getCooldown() {
+  return await getState("cooldown", {
+    consecutiveFailures: 0,
+    cooldownUntil: null,
+    rateLimitedAt: null,
+  });
+}
+
 export async function getRateLimitStatus() {
-  const quota = await getQuota();
   const cfg = await getConfig();
+  const quota = await getQuota();
+  const cd = await getCooldown();
   const usage = typeof quota.count === "number" ? quota.count : 0;
   const today = new Date().toISOString().slice(0, 10);
-  // Daily cap reached: pause until the day rolls over. Jobs stay queued and
-  // resume automatically when the cap resets.
+
+  // Hard stop: daily cap.
   if (quota.date === today && usage >= cfg.daily_limit) {
-    const until = new Date(`${today}T23:59:59.999Z`).getTime();
     return {
       rate_limited: true,
-      until,
+      until: new Date(`${today}T23:59:59.999Z`).getTime(),
       reason: "daily quota reached",
       usage,
     };
   }
-  if (!quota.rateLimitedAt) {
-    return { rate_limited: false, until: null, reason: null, usage };
+
+  // Cooldown from backoff.
+  if (cd.cooldownUntil) {
+    const until = new Date(cd.cooldownUntil).getTime();
+    if (Date.now() < until) {
+      return {
+        rate_limited: true,
+        until,
+        reason: cd.lastError || "rate limited",
+        usage,
+      };
+    }
+    // Cooldown expired. If the observation is still fresh (< 1 hour),
+    // do NOT immediately retry — use a reduced cooldown to space things out.
+    if (cd.rateLimitedAt) {
+      const observedAt = new Date(cd.rateLimitedAt).getTime();
+      const fresh = Date.now() - observedAt < RATE_LIMIT_MEMORY_MS;
+      if (fresh) {
+        return {
+          rate_limited: true,
+          until: Date.now() + 60_000, // 1 minute grace
+          reason: "cooling down after rate limit",
+          usage,
+        };
+      }
+    }
   }
-  const seenAt = new Date(quota.rateLimitedAt).getTime();
-  const fresh = Date.now() - seenAt < RATE_LIMIT_MEMORY_MS;
-  if (!fresh) {
-    return { rate_limited: false, until: null, reason: null, usage };
-  }
-  const until = quota.rateLimitedUntil
-    ? new Date(quota.rateLimitedUntil).getTime()
-    : 0;
-  if (Date.now() < until) {
-    return {
-      rate_limited: true,
-      until,
-      reason: quota.lastError || "rate limited",
-      usage,
-    };
-  }
+
   return { rate_limited: false, until: null, reason: null, usage };
 }
 
 async function recordRateLimit(error) {
   const raw = String(error?.message || "rate limited").slice(0, 500);
-  const retryMatch = raw.match(/retry\s*(?:after|in)\s*([\d.]+)\s*s/i);
-  let retryMs = 60_000;
-  if (retryMatch) {
-    const parsed = parseFloat(retryMatch[1]) * 1000;
-    if (Number.isFinite(parsed)) {
-      retryMs = Math.min(Math.max(Math.floor(parsed), 5_000), MAX_COOLDOWN_MS);
-    }
-  }
-  const quota = await getQuota();
-  await setState("quota", {
-    ...quota,
+
+  const cd = await getCooldown();
+  const consecutive = (cd.consecutiveFailures || 0) + 1;
+  const backoff = Math.min(
+    BASE_COOLDOWN_MS * 2 ** (consecutive - 1),
+    MAX_COOLDOWN_MS,
+  );
+
+  const until = Date.now() + backoff;
+  await setState("cooldown", {
+    consecutiveFailures: consecutive,
+    cooldownUntil: new Date(until).toISOString(),
     rateLimitedAt: new Date().toISOString(),
-    retryAfterMs: retryMs,
-    rateLimitedUntil: new Date(Date.now() + retryMs).toISOString(),
     lastError: raw,
+    backoffMs: backoff,
   });
+
+  return until;
+}
+
+async function recordSuccess() {
+  const cd = await getCooldown();
+  if (cd.consecutiveFailures > 0) {
+    await setState("cooldown", {
+      ...cd,
+      consecutiveFailures: 0,
+      cooldownUntil: null,
+      lastError: null,
+    });
+  }
 }
 
 async function bumpUsage() {
@@ -140,16 +203,19 @@ async function bumpUsage() {
   if (quota.date === today) {
     await setState("quota", { ...quota, count: (quota.count || 0) + 1 });
   } else {
+    // New day — reset count, keep cooldown fields intact.
     await setState("quota", {
       date: today,
       count: 1,
       rateLimitedAt: quota.rateLimitedAt,
-      retryAfterMs: quota.retryAfterMs,
-      rateLimitedUntil: quota.rateLimitedUntil,
       lastError: quota.lastError,
     });
   }
 }
+
+// ---------------------------------------------------------------------------
+// Image loading + Gemini call
+// ---------------------------------------------------------------------------
 
 async function loadImageData(objectKey) {
   const res = await r2.send(
@@ -170,9 +236,15 @@ function isRetryable(error) {
   const raw = String(error?.message || "");
   return (
     (error?.status && error.status >= 429) ||
-    /busy|high demand|overloaded|rate|quota|unavailable|timed?\s*out/i.test(raw)
+    /busy|high demand|overloaded|rate|quota|unavailable|timed?\s*out/i.test(
+      raw,
+    )
   );
 }
+
+// ---------------------------------------------------------------------------
+// Job processing
+// ---------------------------------------------------------------------------
 
 async function processJob(job) {
   await pool.query(
@@ -185,9 +257,7 @@ async function processJob(job) {
     }
     const { mime, data } = await loadImageData(job.object_key);
     const prompt = job.prompt || (await getConfig()).master_prompt;
-    // Bound the Gemini call: drain() is single-flight, so one hanging request
-    // would stall the whole queue. A timeout is retryable, so the job returns
-    // to queued and retries on the next tick instead of being marked failed.
+
     const response = await Promise.race([
       ai.models.generateContent({
         model: GEMINI_MODEL,
@@ -203,18 +273,19 @@ async function processJob(job) {
         ),
       ),
     ]);
+
     const tags = parseTags(response.text);
-    if (!tags) {
-      throw new Error("Gemini response was not a tag array");
-    }
+    if (!tags) throw new Error("Gemini response was not a tag array");
+
     await bumpUsage();
+    await recordSuccess();
+
     const current = await pool.query(
       `SELECT tags FROM images WHERE object_key = $1 LIMIT 1`,
       [job.object_key],
     );
-    if (current.rows.length === 0) {
-      throw new Error("image not found");
-    }
+    if (current.rows.length === 0) throw new Error("image not found");
+
     const merged = mergeTags(current.rows[0].tags, tags);
     await pool.query(`UPDATE images SET tags = $1 WHERE object_key = $2`, [
       merged.join(" "),
@@ -227,11 +298,9 @@ async function processJob(job) {
   } catch (err) {
     const raw = String(err?.message || "AI tagging failed").slice(0, 500);
     console.error("AI tagging failed:", raw);
+
     if (isRetryable(err)) {
       await recordRateLimit(err);
-      // Rate-limited jobs stay queued: the queue pauses on the cooldown and
-      // they retry automatically once it clears (e.g. when the daily quota
-      // resets) instead of being marked failed.
       await pool.query(
         `UPDATE ai_jobs SET status = 'queued', error = $1 WHERE id = $2`,
         [raw, job.id],
@@ -245,6 +314,10 @@ async function processJob(job) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Drain loop
+// ---------------------------------------------------------------------------
+
 let lastCallAt = 0;
 let processing = false;
 
@@ -253,20 +326,33 @@ async function drain() {
   processing = true;
   try {
     if (await getPaused()) return;
-    const { rate_limited } = await getRateLimitStatus();
-    if (rate_limited) return;
+
+    const rl = await getRateLimitStatus();
+    if (rl.rate_limited) {
+      // Sleep until cooldown clears — don't busy-loop.
+      const sleepMs = Math.max(0, rl.until - Date.now()) + 1000;
+      if (sleepMs > 0 && sleepMs < RATE_LIMIT_MEMORY_MS) {
+        scheduleDrain(sleepMs);
+      }
+      return;
+    }
+
     const cfg = await getConfig();
     const wait = lastCallAt + cfg.min_interval_ms - Date.now();
-    if (wait > 0) return;
+    if (wait > 0) {
+      scheduleDrain(wait);
+      return;
+    }
+
     const { rows } = await pool.query(
       `SELECT * FROM ai_jobs WHERE status = 'queued'
        ORDER BY priority DESC, created_at ASC LIMIT 1`,
     );
     if (rows.length === 0) return;
+
     lastCallAt = Date.now();
     await processJob(rows[0]);
   } catch (err) {
-    // Transient DB hiccups are fine — the next tick retries.
     if (!/connection|ECONNREFUSED|pool/i.test(String(err?.message || ""))) {
       console.error("[aiQueue] drain error:", err.message);
     }
@@ -275,14 +361,36 @@ async function drain() {
   }
 }
 
+function scheduleDrain(ms) {
+  if (activeTimeout) clearTimeout(activeTimeout);
+  activeTimeout = setTimeout(() => {
+    activeTimeout = null;
+    drain();
+  }, Math.min(ms, 60_000));
+  activeTimeout.unref();
+}
+
+// ---------------------------------------------------------------------------
+// Public API
+// ---------------------------------------------------------------------------
+
 export function startQueue() {
-  // Test suites opt out so a shared dev DB isn't drained by several workers
-  // at once during `npm test`.
   if (process.env.AI_QUEUE === "false") return;
   if (drainTimer || !isGeminiConfigured()) return;
-  drainTimer = setInterval(drain, DRAIN_INTERVAL_MS);
+  drainTimer = setInterval(drain, 10_000);
   drainTimer.unref();
   drain();
+}
+
+export function stopQueue() {
+  if (drainTimer) {
+    clearInterval(drainTimer);
+    drainTimer = null;
+  }
+  if (activeTimeout) {
+    clearTimeout(activeTimeout);
+    activeTimeout = null;
+  }
 }
 
 export async function getQueueCounts() {
@@ -294,7 +402,7 @@ export async function getQueueCounts() {
     for (const row of rows)
       if (row.status in counts) counts[row.status] = row.n;
   } catch {
-    // DB not ready yet — return zeroed counts.
+    // DB not ready yet.
   }
   return counts;
 }

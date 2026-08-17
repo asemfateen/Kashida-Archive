@@ -705,14 +705,19 @@ function buildTsQuery(raw) {
   return terms.map((t) => `${t}:*`).join(" | ");
 }
 
-app.get("/api/search", async (req, res) => {
-  const q = String(req.query.q ?? "").trim();
-  if (!q) {
-    return res.status(400).json({ error: "q query parameter is required" });
-  }
+// q may arrive as a string or an array (repeatable query params).
+function parseStringList(v) {
+  if (v === undefined || v === null) return [];
+  const arr = Array.isArray(v) ? v : [v];
+  return arr.map((x) => String(x).trim()).filter(Boolean);
+}
 
-  const terms = buildTsQuery(q);
-  const publicBase = (process.env.R2_PUBLIC_BASE_URL || "").replace(/\/+$/, "");
+// Shared WHERE builder for /api/search and /api/facets so facet counts always
+// annotate the exact result set they describe (no dead-end links). Keyword
+// matching is full-text OR fuzzy-trigram; facet filters (exact tags, type,
+// date range) AND on top of it, mirroring clicking facets in the Matrix.
+function buildSearchContext(req) {
+  const q = String(req.query.q ?? "").trim();
   const sort = req.query.sort || "rank";
   const orderBy =
     sort === "newest"
@@ -720,6 +725,65 @@ app.get("/api/search", async (req, res) => {
       : sort === "oldest"
         ? "created_at ASC"
         : "rank DESC, created_at DESC";
+
+  const clauses = [];
+  const params = [];
+
+  if (q) {
+    params.push(buildTsQuery(q), q, `%${q}%`);
+    const base = params.length - 3;
+    clauses.push(
+      `(search_vector @@ to_tsquery('simple', $${base + 1}) OR tags ILIKE $${base + 3} OR word_similarity(tags, $${base + 2}) >= 0.25)`,
+    );
+  }
+
+  for (const tag of parseStringList(req.query.tag)) {
+    params.push(tag);
+    clauses.push(`string_to_array(tags, ' ') @> ARRAY[$${params.length}]`);
+  }
+
+  const type = String(req.query.type ?? "").trim();
+  if (type === "jpg") {
+    clauses.push(`(object_key ILIKE '%.jpg' OR object_key ILIKE '%.jpeg')`);
+  } else if (type === "png") {
+    clauses.push(`object_key ILIKE '%.png'`);
+  } else if (type === "raw") {
+    clauses.push(
+      `NOT (object_key ILIKE '%.jpg' OR object_key ILIKE '%.jpeg' OR object_key ILIKE '%.png')`,
+    );
+  }
+
+  const dateFrom = String(req.query.dateFrom ?? "").trim();
+  if (/^\d{4}-\d{2}-\d{2}/.test(dateFrom)) {
+    params.push(dateFrom);
+    clauses.push(`created_at >= $${params.length}::timestamptz`);
+  }
+  const dateTo = String(req.query.dateTo ?? "").trim();
+  if (/^\d{4}-\d{2}-\d{2}/.test(dateTo)) {
+    params.push(dateTo);
+    clauses.push(
+      `created_at < ($${params.length}::timestamptz + interval '1 day')`,
+    );
+  }
+
+  clauses.push("deleted = false");
+  return { q, orderBy, whereSql: clauses.join(" AND "), params };
+}
+
+// Managed DBs without CREATE EXTENSION rights can't use the trigram operators;
+// strip the fuzzy clause and fall back to plain full-text.
+function withoutTrigram(sql) {
+  return sql.replace(/ OR word_similarity\([^)]*\) >= 0\.25/g, "");
+}
+
+app.get("/api/search", async (req, res) => {
+  const q = String(req.query.q ?? "").trim();
+  if (!q) {
+    return res.status(400).json({ error: "q query parameter is required" });
+  }
+
+  const ctx = buildSearchContext(req);
+  const publicBase = (process.env.R2_PUBLIC_BASE_URL || "").replace(/\/+$/, "");
 
   // Composite rank: full-text rank and trigram word_similarity both feed the
   // ordering. ts_rank() returns float4; word_similarity() float8, so cast the
@@ -730,31 +794,25 @@ app.get("/api/search", async (req, res) => {
     word_similarity(tags, $2),
     similarity(tags, $2)
   ) AS rank`;
-  // Fuzzy path: match when a tag is word-similar to the query with a relaxed
-  // 0.25 threshold (default is 0.3, which misses 1-char typos like
-  // "protestt" → "protest" at 0.29). Unrelated terms score ~0, so the floor
-  // still keeps noise out.
-  const WHERE_SQL = `(search_vector @@ to_tsquery('simple', $1) OR tags ILIKE $3 OR word_similarity(tags, $2) >= 0.25)
-    AND deleted = false`;
+
+  const rowsOf = (result) =>
+    result.rows.map((row) => ({
+      ...row,
+      url: publicUrl(publicBase, row.object_key),
+      thumb: thumbUrl(row.object_key),
+    }));
 
   try {
     const result = await pool.query(
       `SELECT id, object_key, original_filename, tags, favorite, created_at,
               ${RANK_SQL}
        FROM images
-       WHERE ${WHERE_SQL}
-       ORDER BY ${orderBy}
+       WHERE ${ctx.whereSql}
+       ORDER BY ${ctx.orderBy}
        LIMIT ${SEARCH_LIMIT}`,
-      [terms, q, `%${q}%`],
+      ctx.params,
     );
-
-    res.json(
-      result.rows.map((row) => ({
-        ...row,
-        url: publicUrl(publicBase, row.object_key),
-        thumb: thumbUrl(row.object_key),
-      })),
-    );
+    res.json(rowsOf(result));
   } catch (err) {
     // If pg_trgm isn't available (e.g. a managed DB without CREATE EXTENSION
     // rights) fall back to the previous full-text query so search still works.
@@ -764,19 +822,12 @@ app.get("/api/search", async (req, res) => {
           `SELECT id, object_key, original_filename, tags, favorite, created_at,
                   ts_rank(search_vector, to_tsquery('simple', $1)) AS rank
            FROM images
-           WHERE (search_vector @@ to_tsquery('simple', $1) OR tags ILIKE $2)
-             AND deleted = false
-           ORDER BY ${orderBy}
+           WHERE ${withoutTrigram(ctx.whereSql)}
+           ORDER BY ${ctx.orderBy}
            LIMIT ${SEARCH_LIMIT}`,
-          [terms, `%${q}%`],
+          ctx.params,
         );
-        return res.json(
-          result.rows.map((row) => ({
-            ...row,
-            url: publicUrl(publicBase, row.object_key),
-            thumb: thumbUrl(row.object_key),
-          })),
-        );
+        return res.json(rowsOf(result));
       } catch (fallbackErr) {
         console.error("Search fallback failed:", fallbackErr.message);
         return res.status(500).json({ error: "search failed" });
@@ -784,6 +835,113 @@ app.get("/api/search", async (req, res) => {
     }
     console.error("Search failed:", err.message);
     res.status(500).json({ error: "search failed" });
+  }
+});
+
+// The Matrix: per-facet value counts (query previews) computed over the same
+// WHERE as /api/search, so a value is only ever shown when selecting it
+// returns results. Works with no q too, annotating the whole library.
+app.get("/api/facets", async (req, res) => {
+  const ctx = buildSearchContext(req);
+
+  const queryFacets = async (where) =>
+    Promise.all([
+      pool.query(
+        `SELECT tag, count(*)::int AS n
+         FROM images
+         CROSS JOIN LATERAL unnest(string_to_array(tags, ' ')) AS t(tag)
+         WHERE ${where} AND tag <> ''
+         GROUP BY tag ORDER BY n DESC, tag ASC LIMIT 30`,
+        ctx.params,
+      ),
+      pool.query(
+        `SELECT CASE
+                  WHEN object_key ILIKE '%.jpg' OR object_key ILIKE '%.jpeg' THEN 'jpg'
+                  WHEN object_key ILIKE '%.png' THEN 'png'
+                  ELSE 'raw'
+                END AS type,
+                count(*)::int AS n
+         FROM images
+         WHERE ${where}
+         GROUP BY type ORDER BY n DESC`,
+        ctx.params,
+      ),
+      pool.query(
+        `SELECT to_char(date_trunc('day', created_at), 'YYYY-MM-DD') AS day,
+                count(*)::int AS n
+         FROM images
+         WHERE ${where}
+         GROUP BY 1 ORDER BY 1 DESC LIMIT 14`,
+        ctx.params,
+      ),
+    ]);
+
+  try {
+    const [tags, types, days] = await queryFacets(ctx.whereSql);
+    res.json({ tags: tags.rows, types: types.rows, days: days.rows });
+  } catch (err) {
+    if (err?.code === "42883" || /pg_trgm|operator.*\?/i.test(err.message)) {
+      try {
+        const [tags, types, days] = await queryFacets(
+          withoutTrigram(ctx.whereSql),
+        );
+        return res.json({
+          tags: tags.rows,
+          types: types.rows,
+          days: days.rows,
+        });
+      } catch (fallbackErr) {
+        console.error("Facets fallback failed:", fallbackErr.message);
+        return res.status(500).json({ error: "facets failed" });
+      }
+    }
+    console.error("Facets failed:", err.message);
+    res.status(500).json({ error: "facets failed" });
+  }
+});
+
+// Keyword disambiguation: tags that start with the typed key, with counts, so
+// the user can swap the free-text term for a real metadata term.
+app.get("/api/tags/suggest", async (req, res) => {
+  const q = String(req.query.q ?? "")
+    .trim()
+    .toLowerCase();
+  if (!q) return res.json([]);
+  const safe = q.replace(/[\\%_]/g, (m) => `\\${m}`);
+  try {
+    const { rows } = await pool.query(
+      `SELECT tag, count(*)::int AS n
+       FROM images
+       CROSS JOIN LATERAL unnest(string_to_array(lower(tags), ' ')) AS t(tag)
+       WHERE deleted = false AND tag LIKE $1
+       GROUP BY tag ORDER BY n DESC, tag ASC LIMIT 10`,
+      [`${safe}%`],
+    );
+    res.json(rows);
+  } catch (err) {
+    console.error("Tag suggest failed:", err.message);
+    res.status(500).json({ error: "tag suggest failed" });
+  }
+});
+
+// Exact tag counts across the live (non-deleted) library. Endgame contextual
+// links show how many photos each tag leads to — like the Matrix, no dead-ends.
+app.get("/api/tags/count", async (req, res) => {
+  const tags = parseStringList(req.query.tag);
+  if (tags.length === 0) return res.json([]);
+  try {
+    const { rows } = await pool.query(
+      `SELECT tag, count(*)::int AS n
+       FROM images
+       CROSS JOIN LATERAL unnest(string_to_array(tags, ' ')) AS t(tag)
+       WHERE deleted = false AND tag = ANY($1::text[])
+       GROUP BY tag ORDER BY tag ASC`,
+      [tags],
+    );
+    res.json(rows);
+  } catch (err) {
+    console.error("Tag count failed:", err.message);
+    res.status(500).json({ error: "tag count failed" });
   }
 });
 

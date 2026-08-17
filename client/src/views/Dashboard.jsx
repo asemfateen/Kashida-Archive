@@ -1,13 +1,17 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   batchDelete,
   batchTag,
   batchUpdate,
   enqueueAiJobs,
+  getFacets,
   searchImages,
 } from "../api.js";
+import FacetPanel from "../components/FacetPanel.jsx";
 import { pushError } from "../notify.jsx";
+
+const GROUP_TYPE_LABELS = { jpg: "JPEG", png: "PNG", raw: "RAW" };
 
 export default function Dashboard({
   images,
@@ -30,6 +34,11 @@ export default function Dashboard({
   const [results, setResults] = useState(null);
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState(null);
+  const [facets, setFacets] = useState(null);
+  const [facetTags, setFacetTags] = useState([]);
+  const [facetType, setFacetType] = useState(null);
+  const [facetDay, setFacetDay] = useState(null);
+  const [groupBy, setGroupBy] = useState("none");
   const [toast, setToast] = useState(null);
   const [selectMode, setSelectMode] = useState(false);
   const [selected, setSelected] = useState(() => new Set());
@@ -52,6 +61,8 @@ export default function Dashboard({
     setResults(null);
     setQuery("");
     setSearching(false);
+    clearFacets();
+    setGroupBy("none");
     navigate("/", { replace: true });
     onFilter("all");
   };
@@ -125,25 +136,52 @@ export default function Dashboard({
     };
   }, []);
 
+  const toggleFacetTag = (tag) =>
+    setFacetTags((prev) =>
+      prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag],
+    );
+  const toggleFacetType = (type) =>
+    setFacetType((prev) => (prev === type ? null : type));
+  const toggleFacetDay = (day) =>
+    setFacetDay((prev) => (prev === day ? null : day));
+  const clearFacets = () => {
+    setFacetTags([]);
+    setFacetType(null);
+    setFacetDay(null);
+  };
+
   const runSearch = async (e, forcedQuery) => {
     if (e) e.preventDefault();
     const q = (forcedQuery ?? query).trim();
     if (!q) {
       setResults(null);
+      setFacets(null);
       return;
     }
     const id = ++searchIdRef.current;
     setSearching(true);
     setSearchError(null);
+    const params = new URLSearchParams({ q });
+    for (const t of facetTags) params.append("tag", t);
+    if (facetType) params.set("type", facetType);
+    if (facetDay) {
+      params.set("dateFrom", facetDay);
+      params.set("dateTo", facetDay);
+    }
     try {
-      const res = await searchImages(q);
+      const [res, facetData] = await Promise.all([
+        searchImages(params),
+        getFacets(params),
+      ]);
       if (id === searchIdRef.current) {
         setResults(res);
+        setFacets(facetData);
         setSearchError(null);
       }
     } catch (err) {
       if (id === searchIdRef.current) {
         setResults([]);
+        setFacets(null);
         setSearchError(err?.message || "Search failed");
       }
     } finally {
@@ -315,6 +353,8 @@ export default function Dashboard({
     setSearching(false);
     setSelected(new Set());
     setSelectMode(false);
+    clearFacets();
+    setGroupBy("none");
   }, [activeFilter]);
 
   // Run the search coming from the taskbar (/?q=...) inside the home grid.
@@ -322,6 +362,8 @@ export default function Dashboard({
     const q = typeof searchQuery === "string" ? searchQuery.trim() : "";
     if (q) {
       setQuery(q);
+      clearFacets();
+      setGroupBy("none");
       runSearch(null, q);
     } else {
       setResults(null);
@@ -331,6 +373,14 @@ export default function Dashboard({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchQuery]);
+
+  // Toggling a facet re-runs the active search so the results, counts and
+  // grid all stay in lock-step (dynamic query previews, no dead-ends).
+  useEffect(() => {
+    const q = query.trim();
+    if (q) runSearch(null, q);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [facetTags, facetType, facetDay]);
 
   const tagCounts = new Map();
   for (const img of images) {
@@ -351,6 +401,177 @@ export default function Dashboard({
     caption: image.caption || image.original_filename,
     meta: image.meta || (image.created_at || "").slice(0, 10),
   });
+
+  const groupKeyOf = (item) => {
+    if (groupBy === "tag")
+      return (item.tags || "").split(" ").filter(Boolean)[0] || "untagged";
+    if (groupBy === "type") {
+      const ext = (item.object_key.split(".").pop() || "").toLowerCase();
+      if (["jpg", "jpeg"].includes(ext)) return "jpg";
+      if (ext === "png") return "png";
+      return "raw";
+    }
+    if (groupBy === "date")
+      return (item.created_at || item.meta || "").slice(0, 10) || "unknown";
+    return null;
+  };
+
+  const groupedGroups = useMemo(() => {
+    if (groupBy === "none" || galleryItems.length === 0) return null;
+    const groups = new Map();
+    galleryItems.forEach((image, idx) => {
+      const item = normalize(image);
+      const key = groupKeyOf(item);
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push({ image, idx });
+    });
+    return [...groups.entries()].sort((a, b) => b[1].length - a[1].length);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [groupBy, galleryItems]);
+
+  const renderCard = (image, idx) => {
+    const item = normalize(image);
+    const isTrash = activeFilter === "trash";
+    const src = item.thumb;
+    return (
+      <div
+        key={item.id || item.object_key}
+        onClick={() => {
+          if (selectMode) {
+            toggleSelect(item.object_key);
+            return;
+          }
+          if (results !== null) {
+            onOpenList(galleryItems.map(normalize), idx);
+          } else {
+            onOpenImage(item);
+          }
+        }}
+        className={`masonry-item relative group photo-card rounded-3xl bg-white shadow-soft border border-gray-100 hover:shadow-lg transition-all duration-300 cursor-pointer p-2 ${
+          selected.has(item.object_key) ? "ring-2 ring-midnight-ink" : ""
+        }`}
+      >
+        <img
+          className="w-full object-cover rounded-3xl group-hover:scale-[1.02] transition-transform duration-300"
+          src={src}
+          alt={item.caption}
+          loading="lazy"
+          decoding="async"
+          onError={(e) => {
+            e.currentTarget.style.display = "none";
+            e.currentTarget.parentElement.classList.add(
+              "aspect-[4/3]",
+              "bg-surface-variant",
+              "rounded-3xl",
+            );
+          }}
+        />
+        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/5 transition-colors duration-300 rounded-3xl z-10 pointer-events-none"></div>
+        {selectMode && (
+          <div className="absolute top-3 left-3 z-30 w-7 h-7 rounded-full flex items-center justify-center bg-white/90 backdrop-blur border border-black/5 shadow-sm pointer-events-none">
+            <span
+              className="material-symbols-outlined text-[18px]"
+              style={
+                selected.has(item.object_key)
+                  ? {
+                      fontVariationSettings: "'FILL' 1",
+                      color: "var(--tertiary, #091426)",
+                    }
+                  : { color: "var(--on-surface-variant, #6A6258)" }
+              }
+            >
+              {selected.has(item.object_key)
+                ? "check_box"
+                : "check_box_outline_blank"}
+            </span>
+          </div>
+        )}
+        {/* Actions Overlay */}
+        <div
+          className="photo-actions absolute top-2 left-2 right-2 flex justify-between opacity-0 transition-opacity z-20"
+          style={selectMode ? { opacity: 0, pointerEvents: "none" } : undefined}
+        >
+          {isTrash ? (
+            <div className="flex gap-2">
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onRestore(item.object_key);
+                }}
+                className="w-8 h-8 rounded-full bg-white/80 backdrop-blur flex items-center justify-center border border-black/5 shadow-sm text-primary"
+                title="Restore"
+              >
+                <span className="material-symbols-outlined text-[16px]">
+                  restore
+                </span>
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDeleteForever(item.object_key);
+                }}
+                className="w-8 h-8 rounded-full bg-white/80 backdrop-blur flex items-center justify-center border border-black/5 shadow-sm text-error hover:bg-error hover:text-on-error transition-colors"
+                title="Delete forever"
+              >
+                <span className="material-symbols-outlined text-[16px]">
+                  delete_forever
+                </span>
+              </button>
+            </div>
+          ) : (
+            <div className="ml-auto flex gap-1">
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleFavorite(item);
+                }}
+                className="w-8 h-8 rounded-full bg-white/80 backdrop-blur flex items-center justify-center border border-black/5 shadow-sm text-midnight-ink hover:bg-white transition-colors"
+                title={
+                  item.favorite ? "Remove from favorites" : "Add to favorites"
+                }
+              >
+                <span
+                  className="material-symbols-outlined text-[16px]"
+                  style={
+                    item.favorite
+                      ? { fontVariationSettings: "'FILL' 1" }
+                      : undefined
+                  }
+                >
+                  {item.favorite ? "star" : "star_outline"}
+                </span>
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const url = item.url || item.src;
+                  if (url) window.open(url, "_blank");
+                }}
+                className="w-8 h-8 rounded-full bg-white/80 backdrop-blur flex items-center justify-center border border-black/5 shadow-sm text-on-surface-variant hover:bg-white transition-colors"
+                title="Download"
+              >
+                <span className="material-symbols-outlined text-[16px]">
+                  download
+                </span>
+              </button>
+            </div>
+          )}
+        </div>
+        {/* Metadata Overlay */}
+        <div className="photo-metadata absolute bottom-2 left-2 right-2 rounded-3xl bg-gradient-to-t from-black/80 to-transparent p-3 pt-8 opacity-0 transition-opacity z-20 text-white">
+          {item.category && (
+            <p className="font-label-caps text-label-caps mb-1">
+              {item.category}
+            </p>
+          )}
+          <p className="font-body-sm text-body-sm truncate">{item.caption}</p>
+          <p className="font-mono-data text-mono-data text-white/70 mt-1">
+            {item.meta}
+          </p>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <>
@@ -472,15 +693,27 @@ export default function Dashboard({
                     "{query}"
                   </span>
                 </p>
-                <button
-                  onClick={clearSearch}
-                  className="flex items-center gap-1 text-on-surface-variant hover:text-error transition-colors font-label-caps text-label-caps"
-                >
-                  <span className="material-symbols-outlined text-[16px]">
-                    close
-                  </span>
-                  Clear
-                </button>
+                <div className="flex items-center gap-2">
+                  <select
+                    value={groupBy}
+                    onChange={(e) => setGroupBy(e.target.value)}
+                    className="bg-surface-container-low border border-black/5 rounded-xl px-3 py-1.5 text-sm font-body-sm text-on-surface focus:border-midnight-ink outline-none"
+                  >
+                    <option value="none">Group: None</option>
+                    <option value="tag">Group: Tag</option>
+                    <option value="type">Group: Type</option>
+                    <option value="date">Group: Date</option>
+                  </select>
+                  <button
+                    onClick={clearSearch}
+                    className="flex items-center gap-1 text-on-surface-variant hover:text-error transition-colors font-label-caps text-label-caps"
+                  >
+                    <span className="material-symbols-outlined text-[16px]">
+                      close
+                    </span>
+                    Clear
+                  </button>
+                </div>
               </div>
             )}
             {!loading && !loadError && galleryItems.length === 0 && (
@@ -566,164 +799,33 @@ export default function Dashboard({
                 </button>
               </div>
             )}
-            <div className="masonry-grid">
-              {galleryItems.map((image) => {
-                const item = normalize(image);
-                const isTrash = activeFilter === "trash";
-                const src = item.thumb;
-                return (
-                  <div
-                    key={item.id || item.object_key}
-                    onClick={() => {
-                      if (selectMode) {
-                        toggleSelect(item.object_key);
-                        return;
-                      }
-                      if (results !== null) {
-                        onOpenList(
-                          galleryItems.map(normalize),
-                          galleryItems.indexOf(image),
-                        );
-                      } else {
-                        onOpenImage(item);
-                      }
-                    }}
-                    className={`masonry-item relative group photo-card rounded-3xl bg-white shadow-soft border border-gray-100 hover:shadow-lg transition-all duration-300 cursor-pointer p-2 ${
-                      selected.has(item.object_key)
-                        ? "ring-2 ring-midnight-ink"
-                        : ""
-                    }`}
-                  >
-                    <img
-                      className="w-full object-cover rounded-3xl group-hover:scale-[1.02] transition-transform duration-300"
-                      src={src}
-                      alt={item.caption}
-                      loading="lazy"
-                      decoding="async"
-                      onError={(e) => {
-                        e.currentTarget.style.display = "none";
-                        e.currentTarget.parentElement.classList.add(
-                          "aspect-[4/3]",
-                          "bg-surface-variant",
-                          "rounded-3xl",
-                        );
-                      }}
-                    />
-                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/5 transition-colors duration-300 rounded-3xl z-10 pointer-events-none"></div>
-                    {selectMode && (
-                      <div className="absolute top-3 left-3 z-30 w-7 h-7 rounded-full flex items-center justify-center bg-white/90 backdrop-blur border border-black/5 shadow-sm pointer-events-none">
-                        <span
-                          className="material-symbols-outlined text-[18px]"
-                          style={
-                            selected.has(item.object_key)
-                              ? {
-                                  fontVariationSettings: "'FILL' 1",
-                                  color: "var(--tertiary, #091426)",
-                                }
-                              : { color: "var(--on-surface-variant, #6A6258)" }
-                          }
-                        >
-                          {selected.has(item.object_key)
-                            ? "check_box"
-                            : "check_box_outline_blank"}
+            {galleryItems.length > 0 &&
+              (groupedGroups ? (
+                <div className="flex flex-col gap-10">
+                  {groupedGroups.map(([key, items]) => (
+                    <section key={key}>
+                      <div className="flex items-center justify-between mb-4">
+                        <h3 className="font-label-caps text-label-caps text-on-surface-variant uppercase flex items-center gap-2">
+                          <span className="w-2 h-2 rounded-full bg-primary" />
+                          {groupBy === "type"
+                            ? GROUP_TYPE_LABELS[key] || key
+                            : key}
+                        </h3>
+                        <span className="font-mono-data text-mono-data text-on-surface-variant">
+                          {items.length}
                         </span>
                       </div>
-                    )}
-                    {/* Actions Overlay */}
-                    <div
-                      className="photo-actions absolute top-2 left-2 right-2 flex justify-between opacity-0 transition-opacity z-20"
-                      style={
-                        selectMode
-                          ? { opacity: 0, pointerEvents: "none" }
-                          : undefined
-                      }
-                    >
-                      {isTrash ? (
-                        <div className="flex gap-2">
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onRestore(item.object_key);
-                            }}
-                            className="w-8 h-8 rounded-full bg-white/80 backdrop-blur flex items-center justify-center border border-black/5 shadow-sm text-primary"
-                            title="Restore"
-                          >
-                            <span className="material-symbols-outlined text-[16px]">
-                              restore
-                            </span>
-                          </button>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onDeleteForever(item.object_key);
-                            }}
-                            className="w-8 h-8 rounded-full bg-white/80 backdrop-blur flex items-center justify-center border border-black/5 shadow-sm text-error hover:bg-error hover:text-on-error transition-colors"
-                            title="Delete forever"
-                          >
-                            <span className="material-symbols-outlined text-[16px]">
-                              delete_forever
-                            </span>
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="ml-auto flex gap-1">
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleFavorite(item);
-                            }}
-                            className="w-8 h-8 rounded-full bg-white/80 backdrop-blur flex items-center justify-center border border-black/5 shadow-sm text-midnight-ink hover:bg-white transition-colors"
-                            title={
-                              item.favorite
-                                ? "Remove from favorites"
-                                : "Add to favorites"
-                            }
-                          >
-                            <span
-                              className="material-symbols-outlined text-[16px]"
-                              style={
-                                item.favorite
-                                  ? { fontVariationSettings: "'FILL' 1" }
-                                  : undefined
-                              }
-                            >
-                              {item.favorite ? "star" : "star_outline"}
-                            </span>
-                          </button>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              const url = item.url || item.src;
-                              if (url) window.open(url, "_blank");
-                            }}
-                            className="w-8 h-8 rounded-full bg-white/80 backdrop-blur flex items-center justify-center border border-black/5 shadow-sm text-on-surface-variant hover:bg-white transition-colors"
-                            title="Download"
-                          >
-                            <span className="material-symbols-outlined text-[16px]">
-                              download
-                            </span>
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                    {/* Metadata Overlay */}
-                    <div className="photo-metadata absolute bottom-2 left-2 right-2 rounded-3xl bg-gradient-to-t from-black/80 to-transparent p-3 pt-8 opacity-0 transition-opacity z-20 text-white">
-                      {item.category && (
-                        <p className="font-label-caps text-label-caps mb-1">
-                          {item.category}
-                        </p>
-                      )}
-                      <p className="font-body-sm text-body-sm truncate">
-                        {item.caption}
-                      </p>
-                      <p className="font-mono-data text-mono-data text-white/70 mt-1">
-                        {item.meta}
-                      </p>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+                      <div className="masonry-grid">
+                        {items.map(({ image, idx }) => renderCard(image, idx))}
+                      </div>
+                    </section>
+                  ))}
+                </div>
+              ) : (
+                <div className="masonry-grid">
+                  {galleryItems.map((image, idx) => renderCard(image, idx))}
+                </div>
+              ))}
           </div>
         </main>
 
@@ -810,65 +912,52 @@ export default function Dashboard({
               </div>
               <div className="mx-3 my-6 h-px bg-black/10"></div>
               <div className="px-3">
-                <h3 className="text-sm font-semibold text-midnight-ink mb-4">
-                  Recent Tags
-                </h3>
-                <div className="flex flex-col gap-2">
-                  {recentTags.map(([tag, n]) => (
-                    <button
-                      key={tag}
-                      onClick={() => {
-                        setQuery(tag);
-                        runSearch(null, tag);
-                      }}
-                      className="group h-12 w-full px-3 flex items-center justify-between gap-2 rounded-2xl text-on-surface-variant bg-white/40 hover:bg-white hover:text-midnight-ink shadow-sm transition-all cursor-pointer"
-                    >
-                      <div className="flex items-center gap-3 min-w-0">
-                        <span className="material-symbols-outlined text-sm shrink-0">
-                          label
-                        </span>
-                        <span className="text-sm font-medium truncate">
-                          {tag}
-                        </span>
-                      </div>
-                      <span className="font-mono-data text-mono-data text-on-surface-variant opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                        {n}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-                {recentTags.length === 0 && (
-                  <p className="text-sm text-on-surface-variant">
-                    No tags yet — upload and AI-tag some images.
-                  </p>
+                {results !== null ? (
+                  <FacetPanel
+                    facets={facets}
+                    facetTags={facetTags}
+                    facetType={facetType}
+                    facetDay={facetDay}
+                    onToggleTag={toggleFacetTag}
+                    onToggleType={toggleFacetType}
+                    onToggleDay={toggleFacetDay}
+                  />
+                ) : (
+                  <>
+                    <h3 className="text-sm font-semibold text-midnight-ink mb-4">
+                      Recent Tags
+                    </h3>
+                    <div className="flex flex-col gap-2">
+                      {recentTags.map(([tag, n]) => (
+                        <button
+                          key={tag}
+                          onClick={() => {
+                            setQuery(tag);
+                            runSearch(null, tag);
+                          }}
+                          className="group h-12 w-full px-3 flex items-center justify-between gap-2 rounded-2xl text-on-surface-variant bg-white/40 hover:bg-white hover:text-midnight-ink shadow-sm transition-all cursor-pointer"
+                        >
+                          <div className="flex items-center gap-3 min-w-0">
+                            <span className="material-symbols-outlined text-sm shrink-0">
+                              label
+                            </span>
+                            <span className="text-sm font-medium truncate">
+                              {tag}
+                            </span>
+                          </div>
+                          <span className="font-mono-data text-mono-data text-on-surface-variant opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                            {n}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                    {recentTags.length === 0 && (
+                      <p className="text-sm text-on-surface-variant">
+                        No tags yet — upload and AI-tag some images.
+                      </p>
+                    )}
+                  </>
                 )}
-              </div>
-              <div className="px-3 mt-6">
-                <h3 className="text-sm font-semibold text-midnight-ink mb-4">
-                  Quick Actions
-                </h3>
-                <div className="flex flex-col gap-2">
-                  <button
-                    onClick={exportJson}
-                    className="h-12 w-full px-3 flex items-center gap-3 rounded-2xl text-on-surface-variant bg-white/40 hover:bg-white hover:text-midnight-ink shadow-sm active:scale-95 transition-all cursor-pointer"
-                    title="Export current view as JSON"
-                  >
-                    <span className="material-symbols-outlined text-sm shrink-0">
-                      file_download
-                    </span>
-                    <span className="text-sm font-medium">Export</span>
-                  </button>
-                  <button
-                    onClick={shareLink}
-                    className="h-12 w-full px-3 flex items-center gap-3 rounded-2xl text-on-surface-variant bg-white/40 hover:bg-white hover:text-midnight-ink shadow-sm active:scale-95 transition-all cursor-pointer"
-                    title="Copy share link"
-                  >
-                    <span className="material-symbols-outlined text-sm shrink-0">
-                      share
-                    </span>
-                    <span className="text-sm font-medium">Share</span>
-                  </button>
-                </div>
               </div>
             </div>
           )}

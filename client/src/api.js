@@ -76,12 +76,49 @@ export async function saveImage(objectKey, originalFilename) {
   return res.json();
 }
 export async function searchImages(q, sort) {
-  const params = new URLSearchParams({ q });
-  if (sort) params.set("sort", sort);
+  // Accept a prebuilt URLSearchParams (carrying q + facets) or a plain q.
+  const params = q instanceof URLSearchParams ? q : new URLSearchParams({ q });
+  if (typeof q === "string" && sort) params.set("sort", sort);
   const res = await fetch(`/api/search?${params}`, {
     headers: authHeaders(),
   });
   if (!res.ok) throw new Error(await errMessage(res, "search failed"));
+  return res.json();
+}
+
+// Facet matrix for the current query context. Accepts the same params as
+// searchImages (q, tag[], type, dateFrom, dateTo) so counts always match the
+// result set — no dead-ends.
+export async function getFacets(params) {
+  const p = params instanceof URLSearchParams ? params : new URLSearchParams();
+  const res = await fetch(`/api/facets?${p}`, {
+    headers: authHeaders(),
+  });
+  if (!res.ok) throw new Error(await errMessage(res, "failed to load facets"));
+  return res.json();
+}
+
+// Tag prefix suggestions for keyword disambiguation ({tag, n}[]).
+export async function suggestTags(q) {
+  const params = new URLSearchParams();
+  if (q) params.set("q", q);
+  const res = await fetch(`/api/tags/suggest?${params}`, {
+    headers: authHeaders(),
+  });
+  if (!res.ok)
+    throw new Error(await errMessage(res, "failed to load suggestions"));
+  return res.json();
+}
+
+// Exact per-tag counts across the live library ({tag, n}[]).
+export async function countTags(tags) {
+  const params = new URLSearchParams();
+  for (const tag of tags) params.append("tag", tag);
+  const res = await fetch(`/api/tags/count?${params}`, {
+    headers: authHeaders(),
+  });
+  if (!res.ok)
+    throw new Error(await errMessage(res, "failed to load tag counts"));
   return res.json();
 }
 

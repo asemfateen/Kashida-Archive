@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
+  countTags,
   enqueueAiJobs,
   getAiConfig,
   patchAiConfig,
@@ -32,11 +34,13 @@ export default function Detail({
   const [newTag, setNewTag] = useState("");
   const [saving, setSaving] = useState(false);
   const [zoom, setZoom] = useState(1);
+  const [tagCounts, setTagCounts] = useState({});
   const tagRef = useRef(null);
   const navRef = useRef(null);
   const keyRef = useRef(image.object_key);
 
   const src = image.url || image.src;
+  const navigate = useNavigate();
 
   useEffect(() => {
     keyRef.current = image.object_key;
@@ -45,6 +49,19 @@ export default function Detail({
     setTagError(null);
     setTagNotice(null);
     setTagging(false);
+    setTagCounts({});
+    const imageTags = [
+      ...new Set((image.tags || "").split(" ").filter(Boolean)),
+    ];
+    if (imageTags.length > 0) {
+      countTags(imageTags)
+        .then((rows) =>
+          setTagCounts(Object.fromEntries(rows.map((r) => [r.tag, r.n]))),
+        )
+        .catch(() => {
+          /* counts are decorative */
+        });
+    }
   }, [image.object_key]);
 
   useEffect(() => {
@@ -392,7 +409,18 @@ export default function Detail({
                   key={tag}
                   className="inline-flex items-center gap-1.5 bg-surface-container-low border border-black/5 text-on-surface font-body-sm text-body-sm px-2.5 py-1 rounded-full"
                 >
-                  {tag}
+                  <button
+                    onClick={() => navigate(`/?q=${encodeURIComponent(tag)}`)}
+                    className="hover:text-midnight-ink hover:underline underline-offset-2 transition-colors flex items-center gap-1.5"
+                    title={`Search archive for "${tag}"`}
+                  >
+                    {tag}
+                    {tagCounts[tag] !== undefined && (
+                      <span className="font-mono-data text-mono-data text-[10px] bg-white/70 border border-black/10 rounded-full px-1.5 py-0.5 leading-none">
+                        {tagCounts[tag]}
+                      </span>
+                    )}
+                  </button>
                   <button
                     onClick={() => removeTag(tag)}
                     disabled={saving}

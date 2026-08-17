@@ -560,3 +560,228 @@ test("POST /api/images/tag validates objectKey and config", async () => {
   assert.equal(status, 500);
   assert.ok(body.error.includes("Gemini"));
 });
+
+// Each facet test builds its own isolated dataset: unique keys and distinctive
+// tag tokens so counts are exact. Query tags use the zx{run} prefix and the
+// non-matching tag uses zq{run} (no shared trigrams — word_similarity's 0.25
+// floor would otherwise pull it into the result set as a fuzzy neighbor).
+// Assertions filter facet responses through mine(), which only looks at rows
+// this test created, so pre-existing library data can't skew counts.
+let facetRun = 0;
+const facetKeys = async () => {
+  const run = ++facetRun;
+  const mk = async (name, filename, tags) => {
+    const ext = filename.endsWith(".png") ? ".png" : ".jpg";
+    const objectKey = `${TEST_PREFIX}/${name}-${run}${ext}`;
+    await j("/api/images", {
+      method: "POST",
+      body: JSON.stringify({ objectKey, originalFilename: filename }),
+    });
+    if (tags)
+      await j(`/api/images/${encodeURIComponent(objectKey)}`, {
+        method: "PATCH",
+        body: JSON.stringify({ tags }),
+      });
+    return objectKey;
+  };
+  const t = (word) =>
+    word === "night" ? `zq${run}${word}` : `zx${run}${word}`;
+  const f1 = await mk("f1", "f1.jpg", `${t("protest")} ${t("crowd")}`);
+  const f2 = await mk("f2", "f2.jpg", t("protest"));
+  const f3 = await mk("f3", "f3.png", t("night"));
+  const mine = (tags) =>
+    Object.fromEntries(
+      tags
+        .filter(
+          (x) => x.tag.startsWith(`zx${run}`) || x.tag.startsWith(`zq${run}`),
+        )
+        .map((x) => [x.tag, x.n]),
+    );
+  return { run, t, f1, f2, f3, mine };
+};
+
+test("GET /api/facets returns tag counts matching the search result set", async () => {
+  const { t, f3, mine } = await facetKeys();
+
+  const { status, body } = await j(`/api/facets?q=${t("protest")}`);
+  assert.equal(status, 200);
+  assert.ok(Array.isArray(body.tags) && Array.isArray(body.types));
+  assert.ok(Array.isArray(body.days));
+  const byTag = mine(body.tags);
+  assert.equal(byTag[t("protest")], 2, "two images carry the query tag");
+  assert.equal(byTag[t("crowd")], 1);
+  assert.equal(
+    byTag[t("night")],
+    undefined,
+    "night tags are outside the query set",
+  );
+  assert.equal(body.tags.filter((x) => x.tag.startsWith("zx")).length, 2);
+
+  // Every previewed tag must actually appear in /api/search results.
+  const search = await j(`/api/search?q=${t("protest")}`);
+  for (const { tag } of body.tags) {
+    assert.ok(
+      search.body.some((i) => i.tags.split(" ").includes(tag)),
+      `tag ${tag} must exist in the result set`,
+    );
+  }
+  assert.ok(!search.body.some((i) => i.object_key === f3));
+});
+
+test("GET /api/facets without q annotates the whole library", async () => {
+  const { t, mine } = await facetKeys();
+  const { body } = await j("/api/facets");
+  const byTag = mine(body.tags);
+  assert.ok(byTag[t("protest")] >= 2);
+  assert.ok(byTag[t("crowd")] >= 1);
+  assert.ok(byTag[t("night")] >= 1);
+});
+
+test("GET /api/facets narrows counts when a tag facet is selected", async () => {
+  const { t, mine } = await facetKeys();
+  const { body } = await j(
+    `/api/facets?q=${t("protest")}&tag=${encodeURIComponent(t("crowd"))}`,
+  );
+  const byTag = mine(body.tags);
+  assert.equal(
+    byTag[t("crowd")],
+    1,
+    "crowd still counted within crowd-filtered set",
+  );
+  assert.equal(
+    byTag[t("protest")],
+    1,
+    "only the image that has both tags remains",
+  );
+  assert.equal(body.tags.filter((x) => x.tag.startsWith("zx")).length, 2);
+});
+
+test("GET /api/facets type facet filters by extension", async () => {
+  const { t, mine } = await facetKeys();
+  const { body } = await j("/api/facets?type=png");
+  const byTag = mine(body.tags);
+  assert.equal(byTag[t("night")], 1);
+  assert.equal(
+    byTag[t("protest")],
+    undefined,
+    "jpg images excluded by type=png",
+  );
+  assert.deepEqual(
+    body.types.map((x) => x.type),
+    ["png"],
+  );
+});
+
+test("GET /api/facets date-range facet filters by created_at", async () => {
+  const { t, f1, mine } = await facetKeys();
+  await pool.query(
+    `UPDATE images SET created_at = created_at - interval '10 days' WHERE object_key = $1`,
+    [f1],
+  );
+  const today = new Date().toISOString().slice(0, 10);
+  const tenDaysAgo = new Date(Date.now() - 10 * 86400000)
+    .toISOString()
+    .slice(0, 10);
+  const nineDaysAgo = new Date(Date.now() - 9 * 86400000)
+    .toISOString()
+    .slice(0, 10);
+
+  const old = await j(
+    `/api/facets?dateFrom=${tenDaysAgo}&dateTo=${nineDaysAgo}`,
+  );
+  const byTag = mine(old.body.tags);
+  assert.equal(
+    byTag[t("protest")],
+    1,
+    "backdated image falls inside the window",
+  );
+  assert.equal(
+    byTag[t("night")],
+    undefined,
+    "today's image outside the window",
+  );
+
+  const recent = await j(`/api/facets?dateFrom=${today}`);
+  const byTag2 = mine(recent.body.tags);
+  assert.equal(byTag2[t("night")], 1);
+  assert.equal(byTag2[t("crowd")], undefined, "backdated crowd image excluded");
+});
+
+test("GET /api/facets excludes deleted images", async () => {
+  const { t, f2, mine } = await facetKeys();
+  await j(`/api/images/${encodeURIComponent(f2)}`, { method: "DELETE" });
+  const { body } = await j(`/api/facets?q=${t("protest")}`);
+  const byTag = mine(body.tags);
+  assert.equal(
+    byTag[t("protest")],
+    1,
+    "deleted image's tags no longer counted",
+  );
+});
+
+test("GET /api/facets rejects SQL-injection inputs safely", async () => {
+  const { status, body } = await j(
+    "/api/facets?q=" +
+      encodeURIComponent("'; DROP TABLE images; --") +
+      "&tag=" +
+      encodeURIComponent("x'); DROP TABLE images; --"),
+  );
+  assert.equal(status, 200);
+  assert.ok(Array.isArray(body.tags) && Array.isArray(body.types));
+  assert.ok(Array.isArray(body.days));
+});
+
+test("GET /api/tags/suggest returns prefix-matching tags with counts", async () => {
+  const { t } = await facetKeys();
+  const { status, body } = await j(`/api/tags/suggest?q=${t("pro")}`);
+  assert.equal(status, 200);
+  const byTag = Object.fromEntries(body.map((x) => [x.tag, x.n]));
+  assert.ok(byTag[t("protest")] >= 2, "prefix finds the query tag");
+  assert.equal(byTag[t("crowd")], undefined, "non-prefix match excluded");
+  assert.equal(byTag[t("night")], undefined);
+  assert.ok(
+    body.every((x) => x.tag.startsWith(t("pro"))),
+    "suggestions are prefix matches only",
+  );
+
+  assert.deepEqual((await j("/api/tags/suggest?q=%21%21")).body, []);
+  assert.deepEqual((await j("/api/tags/suggest")).body, []);
+  const weird = await j(
+    "/api/tags/suggest?q=" + encodeURIComponent("'; DROP TABLE images; --"),
+  );
+  assert.equal(weird.status, 200);
+});
+
+test("GET /api/tags/count returns exact library-wide tag counts", async () => {
+  const { t, f1, f2, f3 } = await facetKeys();
+  const { status, body } = await j(
+    `/api/tags/count?tag=${encodeURIComponent(t("protest"))}&tag=${encodeURIComponent(t("night"))}`,
+  );
+  assert.equal(status, 200);
+  const byTag = Object.fromEntries(body.map((x) => [x.tag, x.n]));
+  assert.equal(byTag[t("protest")], 2, "f1 and f2 both carry the tag");
+  assert.equal(byTag[t("night")], 1, "only f3 carries the tag");
+  assert.equal(byTag[t("crowd")], undefined, "unrequested tag excluded");
+
+  // Counts are library-wide (not scoped to a query) — the deleted flag still
+  // excludes soft-deleted rows.
+  const del = await j(`/api/images/${encodeURIComponent(f1)}`, {
+    method: "DELETE",
+  });
+  assert.equal(del.status, 200);
+  const after = await j(
+    `/api/tags/count?tag=${encodeURIComponent(t("protest"))}`,
+  );
+  const byTagAfter = Object.fromEntries(after.body.map((x) => [x.tag, x.n]));
+  assert.equal(byTagAfter[t("protest")], 1, "deleted image no longer counted");
+
+  // Multiple tags in one call must not require the image to have all of them.
+  const both = await j(
+    `/api/tags/count?tag=${encodeURIComponent(t("protest"))}&tag=${encodeURIComponent(t("night"))}`,
+  );
+  const byTagBoth = Object.fromEntries(both.body.map((x) => [x.tag, x.n]));
+  assert.equal(byTagBoth[t("protest")], 1);
+  assert.equal(byTagBoth[t("night")], 1);
+
+  assert.deepEqual((await j("/api/tags/count")).body, []);
+});

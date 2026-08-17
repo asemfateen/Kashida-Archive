@@ -1,6 +1,9 @@
-import { useEffect, useRef, useState } from "react";
-import { searchImages, updateImage } from "../api.js";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { getFacets, searchImages, updateImage } from "../api.js";
+import FacetPanel from "../components/FacetPanel.jsx";
 import { savedSearches } from "../store.js";
+
+const GROUP_TYPE_LABELS = { jpg: "JPEG", png: "PNG", raw: "RAW" };
 
 export default function Search({
   query,
@@ -14,6 +17,11 @@ export default function Search({
   const [terms, setTerms] = useState([]);
   const [results, setResults] = useState(null);
   const [searching, setSearching] = useState(false);
+  const [facets, setFacets] = useState(null);
+  const [facetTags, setFacetTags] = useState([]);
+  const [facetType, setFacetType] = useState(null);
+  const [facetDay, setFacetDay] = useState(null);
+  const [groupBy, setGroupBy] = useState("none");
   const [sort, setSort] = useState("rank");
   const [elapsed, setElapsed] = useState(null);
   const [saved, setSaved] = useState(savedSearches.list());
@@ -23,26 +31,22 @@ export default function Search({
   const [favorites, setFavorites] = useState({});
   const searchIdRef = useRef(0);
   const lastQueryRef = useRef(null);
+  const lastRunKeyRef = useRef(null);
 
   const showToast = (msg) => {
     setToast(msg);
     setTimeout(() => setToast(null), 2000);
   };
 
-  // The query comes from the URL (/search?q=...). Re-run whenever it changes,
-  // which covers typing a fresh search AND browser back/forward navigation.
-  useEffect(() => {
-    const q = typeof query === "string" ? query.trim() : "";
-    if (q && q !== lastQueryRef.current) {
-      lastQueryRef.current = q;
-      runSearch(q, sort);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query]);
+  const runKey = (q, s) =>
+    `${q}::${s}::${facetTags.join(",")}::${facetType}::${facetDay}`;
 
   const runSearch = async (q, s) => {
     const qq = (q ?? currentQuery).trim();
     const ss = s ?? sort;
+    const key = runKey(qq, ss);
+    if (key === lastRunKeyRef.current) return;
+    lastRunKeyRef.current = key;
     const id = ++searchIdRef.current;
     if (!qq) {
       setSearching(false);
@@ -54,29 +58,68 @@ export default function Search({
     if (termList.length === 0) {
       setSearching(false);
       setResults([]);
+      setFacets(null);
       return;
     }
     setCurrentQuery(qq);
     setTerms(termList);
     setSearching(true);
     const t0 = performance.now();
+    const params = new URLSearchParams({ q: termList.join(" ") });
+    if (ss) params.set("sort", ss);
+    for (const t of facetTags) params.append("tag", t);
+    if (facetType) params.set("type", facetType);
+    if (facetDay) {
+      params.set("dateFrom", facetDay);
+      params.set("dateTo", facetDay);
+    }
     try {
-      const found = await searchImages(termList.join(" "), ss);
+      const [found, facetData] = await Promise.all([
+        searchImages(params),
+        getFacets(params),
+      ]);
       if (id !== searchIdRef.current) return;
       setResults(found);
-      setSelectedKeys(new Set());
+      setFacets(facetData);
       const favMap = {};
       for (const img of found) favMap[img.object_key] = !!img.favorite;
       setFavorites(favMap);
       setElapsed(((performance.now() - t0) / 1000).toFixed(1));
     } catch {
-      if (id === searchIdRef.current) setResults([]);
+      if (id === searchIdRef.current) {
+        setResults([]);
+        setFacets(null);
+      }
     } finally {
       if (id === searchIdRef.current) setSearching(false);
     }
   };
 
+  // The query comes from the URL (/search?q=...). Re-run whenever it changes,
+  // which covers typing a fresh search AND browser back/forward navigation.
+  useEffect(() => {
+    const q = typeof query === "string" ? query.trim() : "";
+    if (q && q !== lastQueryRef.current) {
+      lastQueryRef.current = q;
+      lastRunKeyRef.current = null;
+      clearFacets();
+      setGroupBy("none");
+      runSearch(q, sort);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query]);
+
+  // Facet toggles re-run the active search so results, counts and grid stay
+  // in lock-step (dynamic query previews, no dead-ends).
+  useEffect(() => {
+    const q = lastQueryRef.current;
+    if (!q) return;
+    runSearch(q, sort);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [facetTags, facetType, facetDay]);
+
   const removeTerm = (term) => {
+    lastRunKeyRef.current = null;
     const next = terms.filter((t) => t !== term);
     setTerms(next);
     if (next.length === 0) {
@@ -93,6 +136,20 @@ export default function Search({
     if (["jpg", "jpeg"].includes(ext)) return "jpg";
     if (ext === "png") return "png";
     return "raw";
+  };
+
+  const toggleFacetTag = (tag) =>
+    setFacetTags((prev) =>
+      prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag],
+    );
+  const toggleFacetType = (type) =>
+    setFacetType((prev) => (prev === type ? null : type));
+  const toggleFacetDay = (day) =>
+    setFacetDay((prev) => (prev === day ? null : day));
+  const clearFacets = () => {
+    setFacetTags([]);
+    setFacetType(null);
+    setFacetDay(null);
   };
 
   const toggleFavorite = async (image, e) => {
@@ -115,6 +172,7 @@ export default function Search({
   };
 
   const openSaved = (s) => {
+    lastRunKeyRef.current = null;
     setSort(s.sort || "rank");
     setCurrentQuery((s.terms || []).join(" "));
     setTerms(s.terms || []);
@@ -138,11 +196,137 @@ export default function Search({
     setSaved(savedSearches.list());
   };
 
+  const groupKeyOf = (item) => {
+    if (groupBy === "tag")
+      return (item.tags || "").split(" ").filter(Boolean)[0] || "untagged";
+    if (groupBy === "type") return typeOf(item.object_key);
+    if (groupBy === "date")
+      return (item.created_at || "").slice(0, 10) || "unknown";
+    return null;
+  };
+
+  const groupedGroups = useMemo(() => {
+    if (groupBy === "none" || !results || results.length === 0) return null;
+    const groups = new Map();
+    results.forEach((image, idx) => {
+      const key = groupKeyOf(image);
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push({ image, idx });
+    });
+    return [...groups.entries()].sort((a, b) => b[1].length - a[1].length);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [groupBy, results]);
+
+  const renderCard = (image, i) => {
+    const isFav = favorites[image.object_key] ?? image.favorite;
+    return (
+      <div
+        key={image.id || image.object_key}
+        onClick={() => {
+          onOpenList(
+            results.map((img) => ({
+              ...img,
+              src: img.url || img.src,
+            })),
+            i,
+          );
+        }}
+        className="group relative bg-surface-container-lowest border rounded-lg overflow-hidden flex flex-col hover:border-primary transition-colors cursor-pointer border-outline-variant"
+      >
+        <div className="relative aspect-[4/3] overflow-hidden bg-surface-variant">
+          <img
+            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+            src={image.url || image.src}
+            alt={image.original_filename}
+            onError={(e) => {
+              e.currentTarget.style.display = "none";
+            }}
+          />
+          <div className="absolute top-3 right-3 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+            <button
+              onClick={(e) => toggleFavorite(image, e)}
+              className={`bg-surface-container-lowest/80 backdrop-blur-sm p-1.5 rounded hover:bg-surface-container-lowest shadow-sm ${
+                isFav
+                  ? "text-tertiary-container"
+                  : "text-on-surface-variant hover:text-primary"
+              }`}
+              title="Favorite"
+            >
+              <span
+                className="material-symbols-outlined text-[18px]"
+                style={
+                  isFav ? { fontVariationSettings: "'FILL' 1" } : undefined
+                }
+              >
+                star
+              </span>
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                const url = image.url || image.src;
+                if (url) window.open(url, "_blank");
+              }}
+              className="bg-surface-container-lowest/80 backdrop-blur-sm p-1.5 rounded hover:bg-surface-container-lowest text-on-surface-variant hover:text-primary shadow-sm"
+              title="Download"
+            >
+              <span className="material-symbols-outlined text-[18px]">
+                download
+              </span>
+            </button>
+          </div>
+          <div className="absolute bottom-0 left-0 right-0 p-3 bg-gradient-to-t from-black/80 to-transparent flex flex-wrap gap-1.5">
+            {(image.tags || "")
+              .split(" ")
+              .filter(Boolean)
+              .slice(0, 3)
+              .map((tag) => (
+                <span
+                  key={tag}
+                  className="bg-primary text-on-primary text-[10px] px-1.5 py-0.5 rounded font-mono-data font-bold border border-primary-fixed"
+                >
+                  {tag}
+                </span>
+              ))}
+          </div>
+        </div>
+        <div className="p-3 bg-surface-container-lowest shrink-0 border-t border-outline-variant">
+          <div className="flex justify-between items-start mb-1">
+            <span className="font-mono-data text-[10px] text-on-surface-variant">
+              {image.original_filename}
+            </span>
+            <span className="font-mono-data text-[10px] text-on-surface-variant">
+              {typeOf(image.object_key).toUpperCase()}
+            </span>
+          </div>
+          <p className="font-body-sm text-xs text-primary truncate">
+            {(image.tags || "").split(" ")[0] || "untagged"}
+          </p>
+        </div>
+      </div>
+    );
+  };
+
   const count = results === null ? 0 : results.length;
 
   return (
     <>
       <div className="flex flex-1 overflow-hidden">
+        {/* Facet Matrix Sidebar */}
+        {results !== null && (
+          <aside className="w-72 bg-surface-container-low border-r border-outline-variant overflow-y-auto p-4 shrink-0 hidden lg:block">
+            <FacetPanel
+              facets={facets}
+              facetTags={facetTags}
+              facetType={facetType}
+              facetDay={facetDay}
+              onToggleTag={toggleFacetTag}
+              onToggleType={toggleFacetType}
+              onToggleDay={toggleFacetDay}
+            />
+          </aside>
+        )}
+
         {/* Main Content Area */}
         <main className="flex-1 bg-background flex flex-col overflow-hidden relative">
           {/* Results Header */}
@@ -223,21 +407,6 @@ export default function Search({
                   Save Search
                 </button>
               </div>
-              {selectedCount > 0 && (
-                <button
-                  onClick={() =>
-                    onBatch(
-                      results.filter((img) => selectedKeys.has(img.object_key)),
-                    )
-                  }
-                  className="mt-2 flex items-center gap-1.5 bg-primary text-on-primary px-3 py-1.5 rounded-lg font-label-caps text-label-caps text-xs"
-                >
-                  <span className="material-symbols-outlined text-[14px]">
-                    auto_awesome_motion
-                  </span>
-                  {selectedCount} selected — add to Collections
-                </button>
-              )}
             </div>
             <div className="flex items-center gap-4">
               <button
@@ -260,6 +429,16 @@ export default function Search({
                 <option value="rank">Sort: Relevance</option>
                 <option value="newest">Sort: Newest</option>
                 <option value="oldest">Sort: Oldest</option>
+              </select>
+              <select
+                value={groupBy}
+                onChange={(e) => setGroupBy(e.target.value)}
+                className="bg-surface-container-low border border-outline-variant rounded px-3 py-1.5 text-sm font-body-sm text-on-surface focus:border-primary outline-none"
+              >
+                <option value="none">Group: None</option>
+                <option value="tag">Group: Tag</option>
+                <option value="type">Group: Type</option>
+                <option value="date">Group: Date</option>
               </select>
             </div>
           </div>
@@ -284,113 +463,35 @@ export default function Search({
                 </p>
               </div>
             )}
-            {!searching && results !== null && results.length > 0 && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-grid-gap">
-                {results.map((image, i) => {
-                  const isFav = favorites[image.object_key] ?? image.favorite;
-                  const isSel = selectedKeys.has(image.object_key);
-                  return (
-                    <div
-                      key={image.id || image.object_key}
-                      onClick={() => {
-                        onOpenList(
-                          results.map((img) => ({
-                            ...img,
-                            src: img.url || img.src,
-                          })),
-                          i,
-                        );
-                      }}
-                      className={`group relative bg-surface-container-lowest border rounded-lg overflow-hidden flex flex-col hover:border-primary transition-colors cursor-pointer ${
-                        isSel ? "border-primary" : "border-outline-variant"
-                      }`}
-                    >
-                      <div className="relative aspect-[4/3] overflow-hidden bg-surface-variant">
-                        <img
-                          className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-                          src={image.url || image.src}
-                          alt={image.original_filename}
-                          onError={(e) => {
-                            e.currentTarget.style.display = "none";
-                          }}
-                        />
-                        <div className="absolute top-3 left-3 opacity-0 group-hover:opacity-100 transition-opacity z-10">
-                          <input
-                            type="checkbox"
-                            checked={isSel}
-                            onChange={() => toggleSelect(image.object_key)}
-                            onClick={(e) => e.stopPropagation()}
-                            className="form-checkbox w-5 h-5 text-primary rounded bg-surface-container-lowest border-outline focus:ring-primary shadow-sm"
-                          />
-                        </div>
-                        <div className="absolute top-3 right-3 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity z-10">
-                          <button
-                            onClick={(e) => toggleFavorite(image, e)}
-                            className={`bg-surface-container-lowest/80 backdrop-blur-sm p-1.5 rounded hover:bg-surface-container-lowest shadow-sm ${
-                              isFav
-                                ? "text-tertiary-container"
-                                : "text-on-surface-variant hover:text-primary"
-                            }`}
-                            title="Favorite"
-                          >
-                            <span
-                              className="material-symbols-outlined text-[18px]"
-                              style={
-                                isFav
-                                  ? { fontVariationSettings: "'FILL' 1" }
-                                  : undefined
-                              }
-                            >
-                              star
-                            </span>
-                          </button>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              const url = image.url || image.src;
-                              if (url) window.open(url, "_blank");
-                            }}
-                            className="bg-surface-container-lowest/80 backdrop-blur-sm p-1.5 rounded hover:bg-surface-container-lowest text-on-surface-variant hover:text-primary shadow-sm"
-                            title="Download"
-                          >
-                            <span className="material-symbols-outlined text-[18px]">
-                              download
-                            </span>
-                          </button>
-                        </div>
-                        <div className="absolute bottom-0 left-0 right-0 p-3 bg-gradient-to-t from-black/80 to-transparent flex flex-wrap gap-1.5">
-                          {(image.tags || "")
-                            .split(" ")
-                            .filter(Boolean)
-                            .slice(0, 3)
-                            .map((tag) => (
-                              <span
-                                key={tag}
-                                className="bg-primary text-on-primary text-[10px] px-1.5 py-0.5 rounded font-mono-data font-bold border border-primary-fixed"
-                              >
-                                {tag}
-                              </span>
-                            ))}
-                        </div>
+            {!searching &&
+              results !== null &&
+              results.length > 0 &&
+              (groupedGroups ? (
+                <div className="flex flex-col gap-10">
+                  {groupedGroups.map(([key, items]) => (
+                    <section key={key}>
+                      <div className="flex items-center justify-between mb-4">
+                        <h3 className="font-label-caps text-label-caps text-on-surface-variant uppercase flex items-center gap-2">
+                          <span className="w-2 h-2 rounded-full bg-primary" />
+                          {groupBy === "type"
+                            ? GROUP_TYPE_LABELS[key] || key
+                            : key}
+                        </h3>
+                        <span className="font-mono-data text-mono-data text-on-surface-variant">
+                          {items.length}
+                        </span>
                       </div>
-                      <div className="p-3 bg-surface-container-lowest shrink-0 border-t border-outline-variant">
-                        <div className="flex justify-between items-start mb-1">
-                          <span className="font-mono-data text-[10px] text-on-surface-variant">
-                            {image.original_filename}
-                          </span>
-                          <span className="font-mono-data text-[10px] text-on-surface-variant">
-                            {typeOf(image.object_key).toUpperCase()}
-                          </span>
-                        </div>
-                        <p className="font-body-sm text-xs text-primary truncate">
-                          {(image.tags || "").split(" ")[0] || "untagged"}
-                        </p>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-grid-gap">
+                        {items.map(({ image, idx }) => renderCard(image, idx))}
                       </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+                    </section>
+                  ))}
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-grid-gap">
+                  {results.map((image, i) => renderCard(image, i))}
+                </div>
+              ))}
             {!searching && results === null && (
               <p className="font-body-md text-body-md text-on-surface-variant">
                 Type keywords in the search bar above and press Search.

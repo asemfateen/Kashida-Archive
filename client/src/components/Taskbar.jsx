@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { suggestTags } from "../api.js";
 import Avatar from "./Avatar.jsx";
 
 export default function Taskbar({
@@ -10,8 +11,12 @@ export default function Taskbar({
 }) {
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
+  const [suggestions, setSuggestions] = useState([]);
+  const [showSuggest, setShowSuggest] = useState(false);
   const searchRef = useRef(null);
   const debounceRef = useRef(null);
+  const suggestRef = useRef(null);
+  const suggestIdRef = useRef(0);
 
   useEffect(() => {
     const onKey = (e) => {
@@ -31,17 +36,47 @@ export default function Taskbar({
     setQuery(searchQuery);
   }, [searchQuery]);
 
+  const pickSuggestion = (tag) => {
+    setQuery(tag);
+    setShowSuggest(false);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    onSearch?.(tag);
+  };
+
   const onChange = (value) => {
     setQuery(value);
+    const text = value.trim();
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
-      onSearch?.(value.trim());
+      onSearch?.(text);
     }, 200);
+    // Keyword disambiguation: suggest real metadata tags that start with the
+    // last word being typed, so free-text terms can be swapped for facets.
+    const id = ++suggestIdRef.current;
+    const lastWord = text.split(/\s+/).pop() || "";
+    if (!lastWord) {
+      setSuggestions([]);
+      setShowSuggest(false);
+      return;
+    }
+    if (suggestRef.current) clearTimeout(suggestRef.current);
+    suggestRef.current = setTimeout(() => {
+      suggestTags(lastWord.toLowerCase())
+        .then((data) => {
+          if (id !== suggestIdRef.current) return;
+          setSuggestions(Array.isArray(data) ? data : []);
+          setShowSuggest(true);
+        })
+        .catch(() => {
+          if (id === suggestIdRef.current) setShowSuggest(false);
+        });
+    }, 120);
   };
 
   const submit = (e) => {
     e.preventDefault();
     if (debounceRef.current) clearTimeout(debounceRef.current);
+    setShowSuggest(false);
     onSearch?.(query.trim());
   };
 
@@ -79,6 +114,30 @@ export default function Taskbar({
               Search
             </button>
           </div>
+          {showSuggest && suggestions.length > 0 && (
+            <div className="absolute top-full mt-2 left-0 right-0 bg-white rounded-2xl shadow-lg border border-black/5 overflow-hidden z-50">
+              {suggestions.map(({ tag, n }) => (
+                <button
+                  key={tag}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => pickSuggestion(tag)}
+                  className="w-full px-4 py-2.5 flex items-center justify-between gap-2 text-left hover:bg-surface-container-low transition-colors"
+                >
+                  <span className="flex items-center gap-2 min-w-0">
+                    <span className="material-symbols-outlined text-[16px] text-on-surface-variant shrink-0">
+                      tag
+                    </span>
+                    <span className="text-sm text-on-surface truncate">
+                      {tag}
+                    </span>
+                  </span>
+                  <span className="font-mono-data text-mono-data text-on-surface-variant shrink-0">
+                    {n}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
         </form>
       </div>
       <div className="flex items-center gap-4 w-1/4 justify-end">
