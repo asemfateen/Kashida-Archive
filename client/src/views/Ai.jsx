@@ -434,7 +434,7 @@ function QueueSection({ jobs, title, icon, accent, expanded, onToggle, actions, 
   );
 }
 
-function BoardView({ jobs, expanded, onToggle, actions, masterPrompt, saving }) {
+function BoardView({ jobs, expanded, onToggle, actions, masterPrompt, saving, onClearDone }) {
   const columns = [
     { key: "queued", label: "Waiting", icon: "schedule", filter: (j) => j.status === "queued" },
     { key: "running", label: "Running", icon: "play_circle", filter: (j) => j.status === "running" },
@@ -454,6 +454,15 @@ function BoardView({ jobs, expanded, onToggle, actions, masterPrompt, saving }) 
               <span className={`w-2 h-2 rounded-full ${meta.dot}`}></span>
               <span className="font-label-caps text-label-caps text-on-surface-variant">{col.label}</span>
               <span className="font-mono-data text-mono-data text-on-surface-variant/60">{items.length}</span>
+              {col.key === "done" && items.length > 0 && (
+                <button
+                  onClick={onClearDone}
+                  className="flex items-center gap-1 ml-auto px-3 py-1 rounded-full text-[13px] font-label-caps text-label-caps bg-rose-50 text-rose-600 hover:bg-rose-100 transition-colors"
+                >
+                  <span className="material-symbols-outlined text-[14px]">delete_sweep</span>
+                  Clear all
+                </button>
+              )}
             </div>
             <div className="flex-1 flex flex-col gap-1.5 overflow-y-auto min-h-0 pb-4">
               {items.length === 0 ? (
@@ -782,9 +791,9 @@ export default function Ai() {
                   done.length > 0 ? (
                     <button
                       onClick={clearDone}
-                      className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-label-caps text-label-caps bg-rose-50 text-rose-600 hover:bg-rose-100 transition-colors"
+                      className="flex items-center gap-1 px-3 py-1 rounded-full text-[13px] font-label-caps text-label-caps bg-rose-50 text-rose-600 hover:bg-rose-100 transition-colors"
                     >
-                      <span className="material-symbols-outlined text-[12px]">delete_sweep</span>
+                      <span className="material-symbols-outlined text-[14px]">delete_sweep</span>
                       Clear all
                     </button>
                   ) : null
@@ -821,6 +830,7 @@ export default function Ai() {
               actions={actions}
               masterPrompt={configDraft.master_prompt || DEFAULT_PROMPT}
               saving={saving}
+              onClearDone={clearDone}
             />
           )}
 
