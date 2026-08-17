@@ -327,6 +327,12 @@ async function drain() {
   try {
     if (await getPaused()) return;
 
+    // Periodically recover stuck running jobs (every drain cycle)
+    await pool.query(
+      `UPDATE ai_jobs SET status = 'queued', error = 'recovered from stuck running'
+       WHERE status = 'running' AND updated_at < now() - interval '2 minutes'`,
+    );
+
     const rl = await getRateLimitStatus();
     if (rl.rate_limited) {
       // Sleep until cooldown clears — don't busy-loop.
@@ -378,11 +384,11 @@ export async function startQueue() {
   if (process.env.AI_QUEUE === "false") return;
   if (drainTimer || !isGeminiConfigured()) return;
 
-  // Recover orphaned "running" jobs (stuck for >5 minutes, e.g. after deploy)
+  // Recover orphaned "running" jobs (stuck for >2 minutes, e.g. after deploy)
   try {
     const res = await pool.query(
       `UPDATE ai_jobs SET status = 'queued', error = 'recovered from stuck running'
-       WHERE status = 'running' AND updated_at < now() - interval '5 minutes'`,
+       WHERE status = 'running' AND updated_at < now() - interval '2 minutes'`,
     );
     if (res.rowCount > 0) {
       console.log(`[aiQueue] recovered ${res.rowCount} stuck running job(s)`);

@@ -1116,10 +1116,10 @@ app.patch("/api/ai/jobs/:id", async (req, res) => {
     if (check.rows.length === 0) {
       return res.status(404).json({ error: "job not found" });
     }
-    if (check.rows[0].status !== "queued") {
+    if (check.rows[0].status !== "queued" && check.rows[0].status !== "running") {
       return res
         .status(400)
-        .json({ error: "only waiting jobs can be canceled" });
+        .json({ error: "only queued or running jobs can be canceled" });
     }
   }
   const sets = [];
