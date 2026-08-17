@@ -22,6 +22,37 @@ async function errMessage(res, fallback) {
   }
 }
 
+// If the server responds 401 (expired/invalid token), clear local state and
+// redirect to login. Uses the module-level callback wired by auth.jsx to
+// avoid a circular import.
+let _notify401 = null;
+try {
+  // Dynamic import is not needed — auth.jsx sets this before any API call.
+  import("./auth.jsx").then((m) => {
+    _notify401 = m.notifyUnauthorized;
+  });
+} catch { /* ignore */ }
+
+function handle401() {
+  try {
+    localStorage.removeItem("kashida_token");
+  } catch { /* ignore */ }
+  if (_notify401) _notify401();
+}
+
+// Wrapper around fetch that attaches auth headers and handles 401.
+async function apiFetch(url, opts = {}) {
+  const res = await fetch(url, {
+    ...opts,
+    headers: authHeaders(opts.headers),
+  });
+  if (res.status === 401) {
+    handle401();
+    throw new Error("session expired — please log in again");
+  }
+  return res;
+}
+
 // Timeout-aware fetch. On expiry the request rejects with a real Error
 // ("Request timed out after ...") so callers can distinguish a hang from a
 // user-initiated AbortError. An external signal is still honored alongside
@@ -34,13 +65,21 @@ export function http(url, opts = {}, timeoutMs = 15_000) {
   const signal = opts.signal
     ? AbortSignal.any([opts.signal, ctrl.signal])
     : ctrl.signal;
-  return fetch(url, { ...opts, signal }).finally(() => clearTimeout(timer));
+  return fetch(url, { ...opts, signal })
+    .then((res) => {
+      if (res.status === 401) {
+        handle401();
+        throw new Error("session expired — please log in again");
+      }
+      return res;
+    })
+    .finally(() => clearTimeout(timer));
 }
 
 export async function getUploadUrl(filename, contentType) {
-  const res = await fetch("/api/upload-url", {
+  const res = await apiFetch("/api/upload-url", {
     method: "POST",
-    headers: authHeaders({ "Content-Type": "application/json" }),
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ filename, contentType }),
   });
   if (!res.ok)
@@ -67,9 +106,9 @@ export async function uploadFile(file) {
 }
 
 export async function saveImage(objectKey, originalFilename) {
-  const res = await fetch("/api/images", {
+  const res = await apiFetch("/api/images", {
     method: "POST",
-    headers: authHeaders({ "Content-Type": "application/json" }),
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ objectKey, originalFilename }),
   });
   if (!res.ok) throw new Error(await errMessage(res, "failed to save image"));
@@ -79,9 +118,7 @@ export async function searchImages(q, sort) {
   // Accept a prebuilt URLSearchParams (carrying q + facets) or a plain q.
   const params = q instanceof URLSearchParams ? q : new URLSearchParams({ q });
   if (typeof q === "string" && sort) params.set("sort", sort);
-  const res = await fetch(`/api/search?${params}`, {
-    headers: authHeaders(),
-  });
+  const res = await apiFetch(`/api/search?${params}`);
   if (!res.ok) throw new Error(await errMessage(res, "search failed"));
   return res.json();
 }
@@ -91,9 +128,7 @@ export async function searchImages(q, sort) {
 // result set — no dead-ends.
 export async function getFacets(params) {
   const p = params instanceof URLSearchParams ? params : new URLSearchParams();
-  const res = await fetch(`/api/facets?${p}`, {
-    headers: authHeaders(),
-  });
+  const res = await apiFetch(`/api/facets?${p}`);
   if (!res.ok) throw new Error(await errMessage(res, "failed to load facets"));
   return res.json();
 }
@@ -102,9 +137,7 @@ export async function getFacets(params) {
 export async function suggestTags(q) {
   const params = new URLSearchParams();
   if (q) params.set("q", q);
-  const res = await fetch(`/api/tags/suggest?${params}`, {
-    headers: authHeaders(),
-  });
+  const res = await apiFetch(`/api/tags/suggest?${params}`);
   if (!res.ok)
     throw new Error(await errMessage(res, "failed to load suggestions"));
   return res.json();
@@ -114,9 +147,7 @@ export async function suggestTags(q) {
 export async function countTags(tags) {
   const params = new URLSearchParams();
   for (const tag of tags) params.append("tag", tag);
-  const res = await fetch(`/api/tags/count?${params}`, {
-    headers: authHeaders(),
-  });
+  const res = await apiFetch(`/api/tags/count?${params}`);
   if (!res.ok)
     throw new Error(await errMessage(res, "failed to load tag counts"));
   return res.json();
@@ -124,17 +155,13 @@ export async function countTags(tags) {
 
 export async function listImages(view) {
   const params = view ? `?view=${view}` : "";
-  const res = await fetch(`/api/images${params}`, {
-    headers: authHeaders(),
-  });
+  const res = await apiFetch(`/api/images${params}`);
   if (!res.ok) throw new Error(await errMessage(res, "failed to load images"));
   return res.json();
 }
 
 export async function getImage(objectKey) {
-  const res = await fetch(`/api/images/${encodeURIComponent(objectKey)}`, {
-    headers: authHeaders(),
-  });
+  const res = await apiFetch(`/api/images/${encodeURIComponent(objectKey)}`);
   if (!res.ok) throw new Error(await errMessage(res, "failed to load image"));
   return res.json();
 }
@@ -151,29 +178,23 @@ export async function updateImage(objectKey, patch) {
 
 export async function deleteImage(objectKey, permanent) {
   const params = permanent ? "?permanent=true" : "";
-  const res = await fetch(
+  const res = await apiFetch(
     `/api/images/${encodeURIComponent(objectKey)}${params}`,
-    {
-      method: "DELETE",
-      headers: authHeaders(),
-    },
+    { method: "DELETE" },
   );
   if (!res.ok) throw new Error(await errMessage(res, "failed to delete image"));
   return res.json();
 }
 
 export async function emptyTrash() {
-  const res = await fetch("/api/trash", {
-    method: "DELETE",
-    headers: authHeaders(),
-  });
+  const res = await apiFetch("/api/trash", { method: "DELETE" });
   if (!res.ok) throw new Error(await errMessage(res, "failed to empty trash"));
   return res.json();
 }
 export async function batchUpdate(objectKeys, patch) {
-  const res = await fetch("/api/images/batch", {
+  const res = await apiFetch("/api/images/batch", {
     method: "POST",
-    headers: authHeaders({ "Content-Type": "application/json" }),
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ objectKeys, patch }),
   });
   if (!res.ok)
@@ -182,9 +203,9 @@ export async function batchUpdate(objectKeys, patch) {
 }
 
 export async function batchDelete(objectKeys) {
-  const res = await fetch("/api/images/batch-delete", {
+  const res = await apiFetch("/api/images/batch-delete", {
     method: "POST",
-    headers: authHeaders({ "Content-Type": "application/json" }),
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ objectKeys }),
   });
   if (!res.ok)
@@ -210,9 +231,9 @@ export async function batchTag(objectKeys, tags, signal) {
 }
 
 export async function tagImage(payload) {
-  const res = await fetch("/api/images/tag", {
+  const res = await apiFetch("/api/images/tag", {
     method: "POST",
-    headers: authHeaders({ "Content-Type": "application/json" }),
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
   if (!res.ok) throw new Error(await errMessage(res, "AI tagging failed"));
@@ -224,7 +245,7 @@ export async function tagImage(payload) {
 // ---------------------------------------------------------------------------
 
 export async function getAiStatus() {
-  const res = await fetch("/api/ai/status", { headers: authHeaders() });
+  const res = await apiFetch("/api/ai/status");
   if (!res.ok)
     throw new Error(await errMessage(res, "failed to load AI status"));
   return res.json();
@@ -234,16 +255,16 @@ export async function listAiJobs({ status, limit = 200 } = {}) {
   const params = new URLSearchParams();
   if (status) params.set("status", status);
   params.set("limit", String(limit));
-  const res = await fetch(`/api/ai/jobs?${params}`, { headers: authHeaders() });
+  const res = await apiFetch(`/api/ai/jobs?${params}`);
   if (!res.ok)
     throw new Error(await errMessage(res, "failed to load AI queue"));
   return res.json();
 }
 
 export async function enqueueAiJobs(objectKeys, prompt) {
-  const res = await fetch("/api/ai/jobs", {
+  const res = await apiFetch("/api/ai/jobs", {
     method: "POST",
-    headers: authHeaders({ "Content-Type": "application/json" }),
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ objectKeys, prompt }),
   });
   if (!res.ok)
@@ -252,9 +273,9 @@ export async function enqueueAiJobs(objectKeys, prompt) {
 }
 
 export async function patchAiJob(jobId, patch) {
-  const res = await fetch(`/api/ai/jobs/${encodeURIComponent(jobId)}`, {
+  const res = await apiFetch(`/api/ai/jobs/${encodeURIComponent(jobId)}`, {
     method: "PATCH",
-    headers: authHeaders({ "Content-Type": "application/json" }),
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(patch),
   });
   if (!res.ok) throw new Error(await errMessage(res, "failed to update job"));
@@ -262,18 +283,16 @@ export async function patchAiJob(jobId, patch) {
 }
 
 export async function retryAiJob(jobId) {
-  const res = await fetch(`/api/ai/jobs/${encodeURIComponent(jobId)}/retry`, {
+  const res = await apiFetch(`/api/ai/jobs/${encodeURIComponent(jobId)}/retry`, {
     method: "POST",
-    headers: authHeaders(),
   });
   if (!res.ok) throw new Error(await errMessage(res, "failed to retry job"));
   return res.json();
 }
 
 export async function retryAllFailedAiJobs() {
-  const res = await fetch("/api/ai/jobs/retry-failed", {
+  const res = await apiFetch("/api/ai/jobs/retry-failed", {
     method: "POST",
-    headers: authHeaders(),
   });
   if (!res.ok)
     throw new Error(await errMessage(res, "failed to retry failed jobs"));
@@ -281,34 +300,32 @@ export async function retryAllFailedAiJobs() {
 }
 
 export async function cancelAllAiJobs() {
-  const res = await fetch("/api/ai/jobs/cancel-all", {
+  const res = await apiFetch("/api/ai/jobs/cancel-all", {
     method: "POST",
-    headers: authHeaders(),
   });
   if (!res.ok) throw new Error(await errMessage(res, "failed to cancel jobs"));
   return res.json();
 }
 
 export async function deleteAiJob(jobId) {
-  const res = await fetch(`/api/ai/jobs/${encodeURIComponent(jobId)}`, {
+  const res = await apiFetch(`/api/ai/jobs/${encodeURIComponent(jobId)}`, {
     method: "DELETE",
-    headers: authHeaders(),
   });
   if (!res.ok) throw new Error(await errMessage(res, "failed to delete job"));
   return res.json();
 }
 
 export async function getAiConfig() {
-  const res = await fetch("/api/ai/config", { headers: authHeaders() });
+  const res = await apiFetch("/api/ai/config");
   if (!res.ok)
     throw new Error(await errMessage(res, "failed to load AI settings"));
   return res.json();
 }
 
 export async function patchAiConfig(patch) {
-  const res = await fetch("/api/ai/config", {
+  const res = await apiFetch("/api/ai/config", {
     method: "PATCH",
-    headers: authHeaders({ "Content-Type": "application/json" }),
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(patch),
   });
   if (!res.ok)

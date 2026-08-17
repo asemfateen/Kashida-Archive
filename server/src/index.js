@@ -93,17 +93,18 @@ function makeRateLimit({ windowMs, max }) {
   limiter.reset = () => hits.clear();
   return limiter;
 }
+const RATE_LOGIN = makeRateLimit({ windowMs: 60_000, max: 10 });
 const RATE_UPLOAD = makeRateLimit({ windowMs: 60_000, max: 600 });
 const RATE_TAG = makeRateLimit({ windowMs: 60_000, max: 60 });
 const RATE_AI_JOBS = makeRateLimit({ windowMs: 60_000, max: 300 });
 // Tests reset these between cases to avoid cross-test leaks.
-export { RATE_UPLOAD, RATE_TAG, RATE_AI_JOBS };
+export { RATE_LOGIN, RATE_UPLOAD, RATE_TAG, RATE_AI_JOBS };
 app.get("/api/health", async (req, res) => {
   await dbInit;
   res.json({ ok: true, service: "kashida-archive", db: dbReady });
 });
 
-app.post("/api/auth/login", async (req, res) => {
+app.post("/api/auth/login", RATE_LOGIN, async (req, res) => {
   if (!isAuthConfigured()) {
     return res.status(500).json({
       error:
@@ -1110,16 +1111,25 @@ app.patch("/api/ai/jobs/:id", async (req, res) => {
   const { id } = req.params;
   const { status, prompt } = req.body || {};
   if (status === "canceled") {
-    const check = await pool.query(`SELECT status FROM ai_jobs WHERE id = $1`, [
-      id,
-    ]);
-    if (check.rows.length === 0) {
-      return res.status(404).json({ error: "job not found" });
-    }
-    if (check.rows[0].status !== "queued" && check.rows[0].status !== "running") {
-      return res
-        .status(400)
-        .json({ error: "only queued or running jobs can be canceled" });
+    try {
+      const check = await pool.query(
+        `SELECT status FROM ai_jobs WHERE id = $1`,
+        [id],
+      );
+      if (check.rows.length === 0) {
+        return res.status(404).json({ error: "job not found" });
+      }
+      if (
+        check.rows[0].status !== "queued" &&
+        check.rows[0].status !== "running"
+      ) {
+        return res
+          .status(400)
+          .json({ error: "only queued or running jobs can be canceled" });
+      }
+    } catch (err) {
+      console.error("Cancel check failed:", err.message);
+      return res.status(500).json({ error: "failed to check job status" });
     }
   }
   const sets = [];

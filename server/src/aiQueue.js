@@ -243,6 +243,35 @@ function isRetryable(error) {
 }
 
 // ---------------------------------------------------------------------------
+// Atomic tag merge with row lock — prevents concurrent writers from
+// overwriting each other's tags.
+// ---------------------------------------------------------------------------
+
+async function mergeTagsForImage(objectKey, newTags) {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const { rows } = await client.query(
+      `SELECT tags FROM images WHERE object_key = $1 FOR UPDATE`,
+      [objectKey],
+    );
+    if (rows.length === 0) throw new Error("image not found");
+    const merged = mergeTags(rows[0].tags, newTags);
+    await client.query(
+      `UPDATE images SET tags = $1 WHERE object_key = $2`,
+      [merged.join(" "), objectKey],
+    );
+    await client.query("COMMIT");
+    return merged;
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Job processing
 // ---------------------------------------------------------------------------
 
@@ -280,17 +309,7 @@ async function processJob(job) {
     await bumpUsage();
     await recordSuccess();
 
-    const current = await pool.query(
-      `SELECT tags FROM images WHERE object_key = $1 LIMIT 1`,
-      [job.object_key],
-    );
-    if (current.rows.length === 0) throw new Error("image not found");
-
-    const merged = mergeTags(current.rows[0].tags, tags);
-    await pool.query(`UPDATE images SET tags = $1 WHERE object_key = $2`, [
-      merged.join(" "),
-      job.object_key,
-    ]);
+    const merged = await mergeTagsForImage(job.object_key, tags);
     await pool.query(
       `UPDATE ai_jobs SET status = 'done', result_tags = $1, error = '', finished_at = now() WHERE id = $2`,
       [tags.join(" "), job.id],

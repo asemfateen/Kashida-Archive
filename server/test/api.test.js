@@ -1,6 +1,6 @@
 import { before, after, test } from "node:test";
 import assert from "node:assert/strict";
-import { app, server as moduleServer } from "../src/index.js";
+import { app, server as moduleServer, RATE_LOGIN } from "../src/index.js";
 import pool from "../src/db.js";
 
 const TEST_PREFIX = `test/${Date.now()}`;
@@ -784,4 +784,23 @@ test("GET /api/tags/count returns exact library-wide tag counts", async () => {
   assert.equal(byTagBoth[t("night")], 1);
 
   assert.deepEqual((await j("/api/tags/count")).body, []);
+});
+
+test("POST /api/auth/login rate-limits after 10 rapid attempts", async () => {
+  RATE_LOGIN.reset();
+  for (let i = 0; i < 10; i++) {
+    const res = await fetch(`${base}/api/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: "admin", password: "nope" }),
+    });
+    assert.equal(res.status, 401, `attempt ${i + 1} should 401 (bad creds)`);
+  }
+  const blocked = await fetch(`${base}/api/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username: "admin", password: "admin" }),
+  });
+  assert.equal(blocked.status, 429, "11th attempt should be rate-limited");
+  RATE_LOGIN.reset();
 });

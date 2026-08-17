@@ -2,11 +2,22 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 
 const TOKEN_KEY = "kashida_token";
+
+// Module-level ref so api.js can trigger logout on 401 without a circular import.
+let onUnauthorized = null;
+export function setOnUnauthorized(fn) {
+  onUnauthorized = fn;
+}
+export function notifyUnauthorized() {
+  if (onUnauthorized) onUnauthorized();
+}
 
 const AuthContext = createContext(null);
 
@@ -44,6 +55,12 @@ export function AuthProvider({ children }) {
       /* ignore */
     }
   }, []);
+
+  // Wire up the module-level 401 callback so api.js can trigger logout.
+  useEffect(() => {
+    setOnUnauthorized(() => logout);
+    return () => setOnUnauthorized(null);
+  }, [logout]);
 
   const value = useMemo(
     () => ({ token, isAuthed: Boolean(token), login, logout }),

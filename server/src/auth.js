@@ -8,8 +8,7 @@ const isProduction = process.env.NODE_ENV === "production";
 
 export const ADMIN_USER = process.env.ADMIN_USER || "admin";
 export const ADMIN_PASS = process.env.ADMIN_PASS || "admin";
-export const JWT_SECRET =
-  process.env.JWT_SECRET || "kashida-dev-secret-change-me-in-production";
+export const JWT_SECRET = process.env.JWT_SECRET || (isProduction ? "" : "kashida-dev-secret-change-me-in-production");
 export const TOKEN_TTL = "7d";
 
 export function isAuthConfigured() {
