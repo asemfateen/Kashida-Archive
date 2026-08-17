@@ -334,6 +334,30 @@ async function processJob(job) {
 }
 
 // ---------------------------------------------------------------------------
+// Auto-cleanup: remove finished jobs older than 1 hour
+// ---------------------------------------------------------------------------
+
+const CLEANUP_INTERVAL_MS = 5 * 60_000; // run every 5 minutes
+const JOB_TTL_MS = 60 * 60_000; // 1 hour
+
+let cleanupTimer = null;
+
+async function cleanupOldJobs() {
+  try {
+    const { rowCount } = await pool.query(
+      `DELETE FROM ai_jobs
+       WHERE status IN ('done', 'failed', 'canceled')
+         AND finished_at < now() - interval '1 hour'`,
+    );
+    if (rowCount > 0) {
+      console.log(`[aiQueue] cleaned up ${rowCount} old job(s)`);
+    }
+  } catch {
+    // DB not ready yet — will retry next cycle.
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Drain loop
 // ---------------------------------------------------------------------------
 
@@ -416,6 +440,11 @@ export async function startQueue() {
     // DB not ready yet — will retry on next drain.
   }
 
+  // Run cleanup once on start, then every 5 minutes
+  cleanupOldJobs();
+  cleanupTimer = setInterval(cleanupOldJobs, CLEANUP_INTERVAL_MS);
+  cleanupTimer.unref();
+
   drainTimer = setInterval(drain, 10_000);
   drainTimer.unref();
   drain();
@@ -425,6 +454,10 @@ export function stopQueue() {
   if (drainTimer) {
     clearInterval(drainTimer);
     drainTimer = null;
+  }
+  if (cleanupTimer) {
+    clearInterval(cleanupTimer);
+    cleanupTimer = null;
   }
   if (activeTimeout) {
     clearTimeout(activeTimeout);

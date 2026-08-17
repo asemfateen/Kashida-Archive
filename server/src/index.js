@@ -1217,6 +1217,18 @@ app.post("/api/ai/jobs/cancel-all", async (_req, res) => {
   }
 });
 
+app.delete("/api/ai/jobs/clear-done", async (_req, res) => {
+  try {
+    const { rowCount } = await pool.query(
+      `DELETE FROM ai_jobs WHERE status IN ('done', 'failed', 'canceled')`,
+    );
+    res.json({ deleted: rowCount });
+  } catch (err) {
+    console.error("Clear done jobs failed:", err.message);
+    res.status(500).json({ error: "failed to clear finished jobs" });
+  }
+});
+
 app.delete("/api/ai/jobs/:id", async (req, res) => {
   try {
     const { rowCount } = await pool.query(

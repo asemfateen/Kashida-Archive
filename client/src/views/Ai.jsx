@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   cancelAllAiJobs,
+  clearDoneAiJobs,
   deleteAiJob,
   getAiConfig,
   getAiStatus,
@@ -78,7 +79,7 @@ function LiveDot({ active }) {
   );
 }
 
-function SectionHeader({ label, count, icon, collapsed, onToggle, accent }) {
+function SectionHeader({ label, count, icon, collapsed, onToggle, accent, headerAction }) {
   return (
     <button
       onClick={onToggle}
@@ -89,6 +90,11 @@ function SectionHeader({ label, count, icon, collapsed, onToggle, accent }) {
       <span className={`font-mono-data text-mono-data px-1.5 py-0.5 rounded-md ${accent || "bg-surface-container text-on-surface-variant"}`}>
         {count}
       </span>
+      {headerAction && (
+        <span className="ml-1" onClick={(e) => e.stopPropagation()}>
+          {headerAction}
+        </span>
+      )}
       <span className="material-symbols-outlined text-[16px] text-on-surface-variant/50 ml-auto group-hover:text-on-surface-variant transition-colors">
         {collapsed ? "expand_more" : "expand_less"}
       </span>
@@ -394,7 +400,7 @@ function ViewSwitcher({ active, onChange }) {
   );
 }
 
-function QueueSection({ jobs, title, icon, accent, expanded, onToggle, actions, masterPrompt, saving }) {
+function QueueSection({ jobs, title, icon, accent, expanded, onToggle, actions, masterPrompt, saving, headerAction }) {
   const [collapsed, setCollapsed] = useState(false);
   if (jobs.length === 0) return null;
   return (
@@ -406,6 +412,7 @@ function QueueSection({ jobs, title, icon, accent, expanded, onToggle, actions, 
         collapsed={collapsed}
         onToggle={() => setCollapsed(!collapsed)}
         accent={accent}
+        headerAction={headerAction}
       />
       {!collapsed && (
         <div className="flex flex-col gap-1.5 pl-1">
@@ -626,6 +633,17 @@ export default function Ai() {
     }
   };
 
+  const clearDone = async () => {
+    if (!window.confirm("Remove all done, failed, and cancelled jobs?")) return;
+    try {
+      const res = await clearDoneAiJobs();
+      showToast(`Cleared ${res.deleted} finished job${res.deleted === 1 ? "" : "s"}`);
+      refresh();
+    } catch (err) {
+      pushError(err?.message || "Could not clear finished jobs");
+    }
+  };
+
   const savePrompt = async (job, prompt) => {
     setSaving(job.id);
     try {
@@ -760,6 +778,17 @@ export default function Ai() {
                 actions={actions}
                 masterPrompt={configDraft.master_prompt || DEFAULT_PROMPT}
                 saving={saving}
+                headerAction={
+                  done.length > 0 ? (
+                    <button
+                      onClick={clearDone}
+                      className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-label-caps text-label-caps bg-rose-50 text-rose-600 hover:bg-rose-100 transition-colors"
+                    >
+                      <span className="material-symbols-outlined text-[12px]">delete_sweep</span>
+                      Clear all
+                    </button>
+                  ) : null
+                }
               />
               <QueueSection
                 jobs={canceled}

@@ -307,6 +307,15 @@ export async function cancelAllAiJobs() {
   return res.json();
 }
 
+export async function clearDoneAiJobs() {
+  const res = await apiFetch("/api/ai/jobs/clear-done", {
+    method: "DELETE",
+  });
+  if (!res.ok)
+    throw new Error(await errMessage(res, "failed to clear finished jobs"));
+  return res.json();
+}
+
 export async function deleteAiJob(jobId) {
   const res = await apiFetch(`/api/ai/jobs/${encodeURIComponent(jobId)}`, {
     method: "DELETE",
