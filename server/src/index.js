@@ -988,11 +988,12 @@ app.post("/api/images/tag", RATE_TAG, async (req, res) => {
 
 app.get("/api/ai/status", async (_req, res) => {
   try {
-    const [config, paused, rateLimit, queue] = await Promise.all([
+    const [config, paused, rateLimit, queue, untaggedResult] = await Promise.all([
       getConfig(),
       getPaused(),
       getRateLimitStatus(),
       getQueueCounts(),
+      pool.query(`SELECT count(*)::int AS n FROM images WHERE ai_tagged = false AND deleted = false`),
     ]);
     res.json({
       configured: isGeminiConfigured(),
@@ -1009,6 +1010,7 @@ app.get("/api/ai/status", async (_req, res) => {
         last_error: rateLimit.reason,
       },
       queue,
+      untagged_count: untaggedResult.rows[0]?.n || 0,
     });
   } catch (err) {
     console.error("AI status failed:", err.message);
@@ -1104,6 +1106,49 @@ app.post("/api/ai/jobs", RATE_AI_JOBS, async (req, res) => {
   } catch (err) {
     console.error("Enqueue AI jobs failed:", err.message);
     res.status(500).json({ error: "failed to queue AI tagging" });
+  }
+});
+
+app.post("/api/ai/tag-all-untagged", async (_req, res) => {
+  try {
+    const { rows: images } = await pool.query(
+      `SELECT object_key FROM images WHERE ai_tagged = false AND deleted = false`,
+    );
+    if (images.length === 0) {
+      return res.json({ enqueued: 0, skipped: 0, message: "All images are already AI-tagged" });
+    }
+    const keys = images.map((r) => r.object_key);
+    const { rows: active } = await pool.query(
+      `SELECT object_key FROM ai_jobs
+       WHERE object_key = ANY($1) AND status IN ('queued', 'running')`,
+      [keys],
+    );
+    const activeSet = new Set(active.map((r) => r.object_key));
+    const toInsert = keys.filter((k) => !activeSet.has(k));
+    if (toInsert.length === 0) {
+      return res.json({ enqueued: 0, skipped: activeSet.size, message: "All untagged images are already in the queue" });
+    }
+    const values = [];
+    const tuples = toInsert
+      .map((k) => {
+        values.push(k);
+        return `($${values.length})`;
+      })
+      .join(", ");
+    const inserted = await pool.query(
+      `INSERT INTO ai_jobs (object_key) VALUES ${tuples}
+       RETURNING id, object_key, status, created_at`,
+      values,
+    );
+    res.status(201).json({
+      enqueued: inserted.rows.length,
+      skipped: activeSet.size,
+      total: images.length,
+      jobs: inserted.rows,
+    });
+  } catch (err) {
+    console.error("Tag all untagged failed:", err.message);
+    res.status(500).json({ error: "failed to enqueue untagged images" });
   }
 });
 

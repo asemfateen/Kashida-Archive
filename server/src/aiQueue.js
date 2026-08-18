@@ -311,6 +311,10 @@ async function processJob(job) {
 
     const merged = await mergeTagsForImage(job.object_key, tags);
     await pool.query(
+      `UPDATE images SET ai_tagged = true WHERE object_key = $1`,
+      [job.object_key],
+    );
+    await pool.query(
       `UPDATE ai_jobs SET status = 'done', result_tags = $1, error = '', finished_at = now() WHERE id = $2`,
       [tags.join(" "), job.id],
     );

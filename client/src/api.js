@@ -272,6 +272,15 @@ export async function enqueueAiJobs(objectKeys, prompt) {
   return res.json();
 }
 
+export async function tagAllUntagged() {
+  const res = await apiFetch("/api/ai/tag-all-untagged", {
+    method: "POST",
+  });
+  if (!res.ok)
+    throw new Error(await errMessage(res, "failed to enqueue untagged images"));
+  return res.json();
+}
+
 export async function patchAiJob(jobId, patch) {
   const res = await apiFetch(`/api/ai/jobs/${encodeURIComponent(jobId)}`, {
     method: "PATCH",

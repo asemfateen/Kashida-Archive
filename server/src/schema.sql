@@ -14,6 +14,7 @@ CREATE INDEX IF NOT EXISTS images_search_vector_idx ON images USING GIN (search_
 
 ALTER TABLE images ADD COLUMN IF NOT EXISTS favorite BOOLEAN NOT NULL DEFAULT false;
 ALTER TABLE images ADD COLUMN IF NOT EXISTS deleted BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE images ADD COLUMN IF NOT EXISTS ai_tagged BOOLEAN NOT NULL DEFAULT false;
 
 -- search_vector must be added via ALTER for pre-existing databases, not only in
 -- the CREATE TABLE. Adding the column then the index is idempotent on both.

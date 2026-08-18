@@ -10,6 +10,7 @@ import {
   patchAiJob,
   retryAiJob,
   retryAllFailedAiJobs,
+  tagAllUntagged,
   updateImage,
 } from "../api.js";
 import { pushError } from "../notify.jsx";
@@ -546,6 +547,8 @@ export default function Ai() {
   const [toast, setToast] = useState(null);
   const [configDraft, setConfigDraft] = useState({ master_prompt: "", min_interval_ms: 4000, daily_limit: 50 });
   const [configSaved, setConfigSaved] = useState(false);
+  const [untaggedCount, setUntaggedCount] = useState(0);
+  const [tagAllBusy, setTagAllBusy] = useState(false);
 
   const showToast = (msg) => {
     setToast(msg);
@@ -557,6 +560,7 @@ export default function Ai() {
       const [s, j] = await Promise.all([getAiStatus(), listAiJobs({ limit: 300 })]);
       setStatus(s);
       setJobs(j);
+      setUntaggedCount(s.untagged_count || 0);
     } catch (err) {
       pushError(err?.message || "Failed to refresh AI status");
     }
@@ -653,6 +657,23 @@ export default function Ai() {
     }
   };
 
+  const handleTagAllUntagged = async () => {
+    setTagAllBusy(true);
+    try {
+      const res = await tagAllUntagged();
+      if (res.enqueued > 0) {
+        showToast(`Queued ${res.enqueued} untagged photo${res.enqueued === 1 ? "" : "s"} for AI tagging`);
+      } else {
+        showToast(res.message || "Nothing to tag");
+      }
+      refresh();
+    } catch (err) {
+      pushError(err?.message || "Could not tag untagged images");
+    } finally {
+      setTagAllBusy(false);
+    }
+  };
+
   const savePrompt = async (job, prompt) => {
     setSaving(job.id);
     try {
@@ -719,6 +740,14 @@ export default function Ai() {
             </div>
             <div className="flex items-center gap-2">
               <ViewSwitcher active={view} onChange={setView} />
+              <button
+                onClick={handleTagAllUntagged}
+                disabled={tagAllBusy || untaggedCount === 0}
+                className="flex items-center gap-1.5 bg-emerald-600 text-white px-3 py-1.5 rounded-full font-label-caps text-label-caps hover:bg-emerald-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <span className="material-symbols-outlined text-[14px]">auto_awesome</span>
+                {tagAllBusy ? "Tagging..." : `Tag all untagged (${untaggedCount})`}
+              </button>
               {failedCount > 0 && (
                 <button
                   onClick={retryAll}
