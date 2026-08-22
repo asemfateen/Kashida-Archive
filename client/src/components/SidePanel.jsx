@@ -2,7 +2,6 @@ import { useState } from "react";
 
 const NAV_ITEMS = [
   { key: "all", icon: "grid_view", label: "Gallery" },
-  { key: "recent", icon: "history", label: "Activity" },
   { key: "favorites", icon: "star", label: "Favorites" },
   { key: "trash", icon: "delete", label: "Trash" },
   { key: "upload", icon: "cloud", label: "Cloud" },
