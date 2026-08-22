@@ -33,6 +33,7 @@ const RATE_LIMIT_MEMORY_MS = 60 * 60 * 1000;
 const GEMINI_TIMEOUT_MS = 30_000;
 
 const VALID_STATUSES = ["queued", "running", "done", "failed", "canceled"];
+const MAX_ATTEMPTS = 5;
 
 // ---------------------------------------------------------------------------
 // State helpers (ai_state KV table)
@@ -222,8 +223,16 @@ async function loadImageData(objectKey) {
     new GetObjectCommand({ Bucket: R2_BUCKET, Key: objectKey }),
   );
   if (!res.Body) throw new Error("image body is empty");
+  const MAX_AI_BYTES = 50 * 1024 * 1024;
+  let totalBytes = 0;
   const chunks = [];
-  for await (const chunk of res.Body) chunks.push(chunk);
+  for await (const chunk of res.Body) {
+    totalBytes += chunk.length;
+    if (totalBytes > MAX_AI_BYTES) {
+      throw new Error("image exceeds 50 MB limit for AI tagging");
+    }
+    chunks.push(chunk);
+  }
   const thumb = await sharp(Buffer.concat(chunks))
     .rotate()
     .resize(512, 512, { fit: "inside", withoutEnlargement: true })
@@ -287,6 +296,11 @@ async function processJob(job) {
     const { mime, data } = await loadImageData(job.object_key);
     const prompt = job.prompt || (await getConfig()).master_prompt;
 
+    let timeoutId;
+    const timeoutPromise = new Promise((_, reject) => {
+      timeoutId = setTimeout(() => reject(new Error("Gemini request timed out")), GEMINI_TIMEOUT_MS);
+    });
+
     const response = await Promise.race([
       ai.models.generateContent({
         model: GEMINI_MODEL,
@@ -295,13 +309,9 @@ async function processJob(job) {
           `${prompt}\nRespond ONLY with a JSON array of strings, e.g. ["tag1","tag2"].`,
         ],
       }),
-      new Promise((_, reject) =>
-        setTimeout(
-          () => reject(new Error("Gemini request timed out")),
-          GEMINI_TIMEOUT_MS,
-        ),
-      ),
+      timeoutPromise,
     ]);
+    clearTimeout(timeoutId);
 
     const tags = parseTags(response.text);
     if (!tags) throw new Error("Gemini response was not a tag array");
@@ -322,16 +332,19 @@ async function processJob(job) {
     const raw = String(err?.message || "AI tagging failed").slice(0, 500);
     console.error("AI tagging failed:", raw);
 
-    if (isRetryable(err)) {
+    if (isRetryable(err) && job.attempts < MAX_ATTEMPTS) {
       await recordRateLimit(err);
       await pool.query(
         `UPDATE ai_jobs SET status = 'queued', error = $1 WHERE id = $2`,
         [raw, job.id],
       );
     } else {
+      const finalError = job.attempts >= MAX_ATTEMPTS
+        ? `Max retries (${MAX_ATTEMPTS}) exceeded: ${raw}`
+        : raw;
       await pool.query(
         `UPDATE ai_jobs SET status = 'failed', error = $1, finished_at = now() WHERE id = $2`,
-        [raw, job.id],
+        [finalError, job.id],
       );
     }
   }

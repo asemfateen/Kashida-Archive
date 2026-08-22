@@ -13,9 +13,8 @@ import {
   tagAllUntagged,
   updateImage,
 } from "../api.js";
+import { DEFAULT_PROMPT } from "../constants.js";
 import { pushError } from "../notify.jsx";
-
-const DEFAULT_PROMPT = "Give me 5 descriptive keywords for this image.";
 
 const VIEWS = [
   { key: "queue", label: "Queue", icon: "view_list" },
@@ -24,11 +23,11 @@ const VIEWS = [
 ];
 
 const STATUS_META = {
-  queued: { color: "bg-amber-100 text-amber-700", dot: "bg-amber-500", label: "Waiting" },
-  running: { color: "bg-blue-50 text-blue-600", dot: "bg-blue-500", label: "Running" },
-  done: { color: "bg-emerald-50 text-emerald-700", dot: "bg-emerald-500", label: "Done" },
-  failed: { color: "bg-rose-50 text-rose-600", dot: "bg-rose-500", label: "Failed" },
-  canceled: { color: "bg-gray-100 text-gray-500", dot: "bg-gray-400", label: "Cancelled" },
+  queued: { color: "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400", dot: "bg-amber-500", label: "Waiting" },
+  running: { color: "bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400", dot: "bg-blue-500", label: "Running" },
+  done: { color: "bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400", dot: "bg-emerald-500", label: "Done" },
+  failed: { color: "bg-rose-50 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400", dot: "bg-rose-500", label: "Failed" },
+  canceled: { color: "bg-gray-100 dark:bg-gray-800/30 text-gray-500 dark:text-gray-400", dot: "bg-gray-400", label: "Cancelled" },
 };
 
 const fmtTime = (iso) => {
@@ -51,7 +50,7 @@ const fmtDate = (iso) => {
 
 function Thumb({ src, alt, size = "w-10 h-10" }) {
   return (
-    <div className={`${size} rounded-lg bg-surface-container-low overflow-hidden shrink-0 border border-black/5`}>
+    <div className={`${size} rounded-xl bg-surface-container-low dark:bg-dark-surface-container-highest overflow-hidden shrink-0 border border-black/5 dark:border-dark-outline-variant shadow-sm`}>
       {src ? (
         <img
           src={src}
@@ -62,7 +61,7 @@ function Thumb({ src, alt, size = "w-10 h-10" }) {
         />
       ) : (
         <div className="w-full h-full flex items-center justify-center">
-          <span className="material-symbols-outlined text-on-surface-variant text-[16px]">image</span>
+          <span className="material-symbols-outlined text-on-surface-variant dark:text-dark-on-surface-variant text-[16px]">image</span>
         </div>
       )}
     </div>
@@ -75,7 +74,7 @@ function LiveDot({ active }) {
       {active && (
         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
       )}
-      <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${active ? "bg-emerald-500" : "bg-gray-300"}`}></span>
+      <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${active ? "bg-emerald-500" : "bg-gray-300 dark:bg-gray-600"}`}></span>
     </span>
   );
 }
@@ -86,9 +85,9 @@ function SectionHeader({ label, count, icon, collapsed, onToggle, accent, header
       onClick={onToggle}
       className="w-full flex items-center gap-2 py-2 px-1 group cursor-pointer"
     >
-      <span className="material-symbols-outlined text-[18px] text-on-surface-variant">{icon}</span>
-      <span className="font-title-sm text-title-sm text-midnight-ink font-semibold">{label}</span>
-      <span className={`font-mono-data text-mono-data px-1.5 py-0.5 rounded-md ${accent || "bg-surface-container text-on-surface-variant"}`}>
+      <span className="material-symbols-outlined text-[18px] text-on-surface-variant dark:text-dark-on-surface-variant">{icon}</span>
+      <span className="font-title-sm text-title-sm text-midnight-ink dark:text-dark-on-surface font-semibold">{label}</span>
+      <span className={`font-mono-data text-mono-data px-1.5 py-0.5 rounded-md ${accent || "bg-surface-container dark:bg-dark-surface-container-highest text-on-surface-variant dark:text-dark-on-surface-variant"}`}>
         {count}
       </span>
       {headerAction && (
@@ -96,7 +95,7 @@ function SectionHeader({ label, count, icon, collapsed, onToggle, accent, header
           {headerAction}
         </span>
       )}
-      <span className="material-symbols-outlined text-[16px] text-on-surface-variant/50 ml-auto group-hover:text-on-surface-variant transition-colors">
+      <span className="material-symbols-outlined text-[16px] text-on-surface-variant/50 dark:text-dark-on-surface-variant/50 ml-auto group-hover:text-on-surface-variant dark:group-hover:text-dark-on-surface-variant transition-colors">
         {collapsed ? "expand_more" : "expand_less"}
       </span>
     </button>
@@ -117,7 +116,7 @@ function InlineJob({ job, onRetry, onCancel, onDelete, onEditPrompt, onEditTags,
   const isRunning = job.status === "running";
 
   return (
-    <div className={`rounded-xl border transition-all duration-150 ${expanded ? "bg-white shadow-soft border-black/10" : "bg-white/60 border-black/5 hover:bg-white hover:border-black/10"}`}>
+    <div className={`rounded-2xl border transition-all duration-200 ${expanded ? "bg-white dark:bg-dark-surface-container-high shadow-soft dark:shadow-dark-soft border-black/10 dark:border-dark-outline-variant" : "bg-white/60 dark:bg-dark-surface-container border-black/5 dark:border-dark-outline-variant hover:bg-white dark:hover:bg-dark-surface-container-high hover:shadow-sm hover:border-black/10"}`}>
       <div
         className="flex items-center gap-3 px-3 py-2 cursor-pointer select-none"
         onClick={onToggle}
@@ -125,7 +124,7 @@ function InlineJob({ job, onRetry, onCancel, onDelete, onEditPrompt, onEditTags,
         <Thumb src={job.thumb} alt={filename} />
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
-            <span className="font-body-md text-body-md text-midnight-ink font-medium truncate max-w-[240px]">
+            <span className="font-body-md text-body-md text-midnight-ink dark:text-dark-on-surface font-medium truncate max-w-[240px]">
               {filename}
             </span>
             <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-label-caps text-label-caps ${meta.color}`}>
@@ -133,14 +132,14 @@ function InlineJob({ job, onRetry, onCancel, onDelete, onEditPrompt, onEditTags,
               {meta.label}
             </span>
             {job.attempts > 0 && job.status !== "done" && (
-              <span className="font-mono-data text-mono-data text-on-surface-variant/60">
+              <span className="font-mono-data text-mono-data text-on-surface-variant/60 dark:text-dark-on-surface-variant/60">
                 #{job.attempts + 1}
               </span>
             )}
           </div>
           <div className="flex items-center gap-2 mt-0.5">
             {job.status === "done" && job.result_tags ? (
-              <span className="font-mono-data text-mono-data text-on-surface-variant truncate">
+              <span className="font-mono-data text-mono-data text-on-surface-variant dark:text-dark-on-surface-variant truncate">
                 {job.result_tags}
               </span>
             ) : job.status === "failed" && job.error ? (
@@ -148,14 +147,14 @@ function InlineJob({ job, onRetry, onCancel, onDelete, onEditPrompt, onEditTags,
                 {job.error}
               </span>
             ) : (
-              <span className="font-body-sm text-body-sm text-on-surface-variant/60">
+              <span className="font-body-sm text-body-sm text-on-surface-variant/60 dark:text-dark-on-surface-variant/60">
                 {job.status === "queued" ? (job.prompt ? "Custom prompt" : "Waiting") : job.status === "running" ? "Analyzing..." : fmtDate(job.created_at)}
               </span>
             )}
           </div>
         </div>
 
-        <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity duration-200" onClick={(e) => e.stopPropagation()}>
           {job.status === "failed" && (
             <Action icon="refresh" title="Retry" onClick={onRetry} />
           )}
@@ -178,19 +177,19 @@ function InlineJob({ job, onRetry, onCancel, onDelete, onEditPrompt, onEditTags,
       </div>
 
       {expanded && (
-        <div className="px-3 pb-3 pt-1 border-t border-black/5">
+        <div className="px-3 pb-3 pt-1 border-t border-black/5 dark:border-dark-outline-variant/50">
           {job.status === "done" ? (
             <div className="flex items-center gap-2">
               <input
                 value={tagsDraft}
                 onChange={(e) => setTagsDraft(e.target.value)}
-                className="flex-1 bg-surface-container-low border border-black/10 rounded-lg px-3 py-1.5 text-body-sm text-on-surface focus:border-midnight-ink focus:ring-1 focus:ring-midnight-ink outline-none transition-colors"
+                className="input-base flex-1"
                 placeholder="e.g. protest, cairo, rally"
               />
               <button
                 disabled={saving}
                 onClick={() => onEditTags(tagsDraft)}
-                className="px-3 py-1.5 rounded-lg bg-midnight-ink text-white font-label-caps text-label-caps hover:bg-prussian-navy transition-colors disabled:opacity-50"
+                className="px-3 py-1.5 rounded-full bg-midnight-ink dark:bg-dark-primary-container text-white dark:text-dark-on-primary font-label-caps text-label-caps hover:bg-prussian-navy dark:hover:opacity-90 transition-all duration-200 disabled:opacity-50 active:scale-95"
               >
                 Save
               </button>
@@ -200,17 +199,17 @@ function InlineJob({ job, onRetry, onCancel, onDelete, onEditPrompt, onEditTags,
               <input
                 value={promptDraft}
                 onChange={(e) => setPromptDraft(e.target.value)}
-                className="w-full bg-surface-container-low border border-black/10 rounded-lg px-3 py-1.5 text-body-sm text-on-surface focus:border-midnight-ink focus:ring-1 focus:ring-midnight-ink outline-none transition-colors"
+                className="input-base w-full"
                 placeholder={DEFAULT_PROMPT}
               />
               <div className="flex items-center justify-between mt-1.5">
-                <span className="font-body-sm text-body-sm text-on-surface-variant/60">
+                <span className="font-body-sm text-body-sm text-on-surface-variant/60 dark:text-dark-on-surface-variant/60">
                   Leave empty to use master prompt
                 </span>
                 <button
                   disabled={saving}
                   onClick={() => onEditPrompt(promptDraft)}
-                  className="px-3 py-1.5 rounded-lg bg-midnight-ink text-white font-label-caps text-label-caps hover:bg-prussian-navy transition-colors disabled:opacity-50"
+                  className="px-3 py-1.5 rounded-full bg-midnight-ink dark:bg-dark-primary-container text-white dark:text-dark-on-primary font-label-caps text-label-caps hover:bg-prussian-navy dark:hover:opacity-90 transition-all duration-200 disabled:opacity-50 active:scale-95"
                 >
                   Save
                 </button>
@@ -229,10 +228,10 @@ function Action({ icon, title, onClick, danger }) {
       onClick={onClick}
       title={title}
       aria-label={title}
-      className={`w-7 h-7 flex items-center justify-center rounded-lg transition-all active:scale-90 ${
+      className={`w-7 h-7 flex items-center justify-center rounded-lg transition-all duration-200 active:scale-90 ${
         danger
-          ? "text-on-surface-variant/50 hover:bg-rose-50 hover:text-rose-600"
-          : "text-on-surface-variant/50 hover:bg-surface-container hover:text-midnight-ink"
+          ? "text-on-surface-variant/50 dark:text-dark-on-surface-variant/50 hover:bg-rose-50 dark:hover:bg-rose-900/30 hover:text-rose-600 dark:hover:text-rose-400"
+          : "text-on-surface-variant/50 dark:text-dark-on-surface-variant/50 hover:bg-surface-container dark:hover:bg-dark-surface-container-highest hover:text-midnight-ink dark:hover:text-dark-on-surface"
       }`}
     >
       <span className="material-symbols-outlined text-[16px]">{icon}</span>
@@ -255,40 +254,40 @@ function StatusBanner({ status }) {
   let msg = "Queue is processing";
 
   if (!status?.configured) {
-    bg = "bg-rose-50/60 border-rose-200/60";
+    bg = "bg-rose-50/60 dark:bg-rose-900/20 border-rose-200/60 dark:border-rose-800/30";
     dot = "bg-rose-500";
     msg = "AI not configured";
   } else if (isPaused) {
-    bg = "bg-gray-50 border-gray-200";
+    bg = "bg-gray-50 dark:bg-dark-surface-container-high border-gray-200 dark:border-dark-outline-variant";
     dot = "bg-gray-400";
     msg = "Queue paused";
   } else if (isLimited) {
-    bg = "bg-amber-50/60 border-amber-200/60";
+    bg = "bg-amber-50/60 dark:bg-amber-900/20 border-amber-200/60 dark:border-amber-800/30";
     dot = "bg-amber-500";
     msg = `Rate limited until ${fmtTime(quota.rate_limited_until)}`;
   }
 
   return (
-    <div className={`rounded-2xl border px-4 py-3 flex items-center justify-between gap-4 ${bg}`}>
+    <div className={`rounded-2xl border px-4 py-3 flex items-center justify-between gap-4 shadow-sm ${bg}`}>
       <div className="flex items-center gap-3">
         <LiveDot active={isActive} />
-        <span className="font-body-md text-body-md text-midnight-ink font-medium">{msg}</span>
-        <span className="font-mono-data text-mono-data text-on-surface-variant/60">
+        <span className="font-body-md text-body-md text-midnight-ink dark:text-dark-on-surface font-medium">{msg}</span>
+        <span className="font-mono-data text-mono-data text-on-surface-variant/60 dark:text-dark-on-surface-variant/60">
           {status?.model || "gemini"}
         </span>
       </div>
       <div className="flex items-center gap-4">
-        <span className="font-mono-data text-mono-data text-on-surface-variant">
+        <span className="font-mono-data text-mono-data text-on-surface-variant dark:text-dark-on-surface-variant">
           {queue.queued + queue.running} in queue
         </span>
         <div className="w-32 flex items-center gap-2">
-          <div className="flex-1 h-1.5 bg-black/5 rounded-full overflow-hidden">
+          <div className="flex-1 h-1.5 bg-black/5 dark:bg-dark-outline-variant/30 rounded-full overflow-hidden">
             <div
               className={`h-full rounded-full transition-all duration-500 ${pct >= 100 ? "bg-rose-500" : pct >= 70 ? "bg-amber-500" : "bg-emerald-500"}`}
               style={{ width: `${pct}%` }}
             ></div>
           </div>
-          <span className="font-mono-data text-mono-data text-on-surface-variant/60 shrink-0">
+          <span className="font-mono-data text-mono-data text-on-surface-variant/60 dark:text-dark-on-surface-variant/60 shrink-0">
             {usage}/{dailyLimit}
           </span>
         </div>
@@ -301,46 +300,46 @@ function SettingsBar({ configDraft, setConfigDraft, onSave, saved, onTogglePause
   const [open, setOpen] = useState(false);
 
   return (
-    <div className="rounded-2xl border border-black/5 bg-white/60 overflow-hidden">
+    <div className="rounded-2xl border border-black/5 dark:border-dark-outline-variant bg-white/60 dark:bg-dark-surface-container-high overflow-hidden shadow-sm">
       <button
         onClick={() => setOpen(!open)}
-        className="w-full flex items-center gap-2 px-4 py-2.5 cursor-pointer hover:bg-surface-container-low/50 transition-colors"
+        className="w-full flex items-center gap-2 px-4 py-2.5 cursor-pointer hover:bg-surface-container-low/50 dark:hover:bg-dark-surface-container transition-colors"
       >
-        <span className="material-symbols-outlined text-[18px] text-on-surface-variant">tune</span>
-        <span className="font-title-sm text-title-sm text-midnight-ink font-semibold">Settings</span>
+        <span className="material-symbols-outlined text-[18px] text-on-surface-variant dark:text-dark-on-surface-variant">tune</span>
+        <span className="font-title-sm text-title-sm text-midnight-ink dark:text-dark-on-surface font-semibold">Settings</span>
         <div className="flex-1"></div>
         <button
           onClick={(e) => { e.stopPropagation(); onTogglePause(); }}
-          className={`flex items-center gap-1.5 px-3 py-1 rounded-full font-label-caps text-label-caps transition-colors ${
+          className={`flex items-center gap-1.5 px-3 py-1 rounded-full font-label-caps text-label-caps transition-all duration-200 ${
             paused
-              ? "bg-midnight-ink text-white hover:bg-prussian-navy"
-              : "bg-surface-container text-on-surface-variant hover:bg-surface-container-high"
+              ? "bg-midnight-ink dark:bg-dark-primary-container text-white dark:text-dark-on-primary hover:bg-prussian-navy dark:hover:opacity-90"
+              : "bg-surface-container dark:bg-dark-surface-container-highest text-on-surface-variant dark:text-dark-on-surface-variant hover:bg-surface-container-high dark:hover:bg-dark-primary-container"
           }`}
         >
           <span className="material-symbols-outlined text-[14px]">{paused ? "play_arrow" : "pause"}</span>
           {paused ? "Resume" : "Pause"}
         </button>
-        <span className="material-symbols-outlined text-[16px] text-on-surface-variant/50">
+        <span className="material-symbols-outlined text-[16px] text-on-surface-variant/50 dark:text-dark-on-surface-variant/50">
           {open ? "expand_less" : "expand_more"}
         </span>
       </button>
 
       {open && (
-        <div className="px-4 pb-4 pt-1 border-t border-black/5">
+        <div className="px-4 pb-4 pt-1 border-t border-black/5 dark:border-dark-outline-variant/50 animate-fade-in">
           <div className="flex flex-col gap-3">
             <div>
-              <label className="font-label-caps text-label-caps text-on-surface-variant block mb-1">Master prompt</label>
+              <label className="font-label-caps text-label-caps text-on-surface-variant dark:text-dark-on-surface-variant block mb-1">Master prompt</label>
               <textarea
                 value={configDraft.master_prompt}
                 onChange={(e) => setConfigDraft((p) => ({ ...p, master_prompt: e.target.value }))}
                 rows={2}
-                className="w-full bg-surface-container-low border border-black/10 rounded-xl px-3 py-2 text-body-sm text-on-surface focus:border-midnight-ink focus:ring-1 focus:ring-midnight-ink outline-none transition-colors resize-y"
+                className="input-base w-full resize-y"
                 placeholder={DEFAULT_PROMPT}
               />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="font-label-caps text-label-caps text-on-surface-variant block mb-1">Pacing (sec)</label>
+                <label className="font-label-caps text-label-caps text-on-surface-variant dark:text-dark-on-surface-variant block mb-1">Pacing (sec)</label>
                 <input
                   type="number"
                   min="0"
@@ -348,26 +347,26 @@ function SettingsBar({ configDraft, setConfigDraft, onSave, saved, onTogglePause
                   step="0.5"
                   value={configDraft.min_interval_ms / 1000}
                   onChange={(e) => setConfigDraft((p) => ({ ...p, min_interval_ms: Math.max(0, Number(e.target.value) * 1000) }))}
-                  className="w-full bg-surface-container-low border border-black/10 rounded-xl px-3 py-1.5 text-body-sm text-on-surface focus:border-midnight-ink focus:ring-1 focus:ring-midnight-ink outline-none transition-colors"
+                  className="input-base w-full"
                 />
               </div>
               <div>
-                <label className="font-label-caps text-label-caps text-on-surface-variant block mb-1">Daily limit</label>
+                <label className="font-label-caps text-label-caps text-on-surface-variant dark:text-dark-on-surface-variant block mb-1">Daily limit</label>
                 <input
                   type="number"
                   min="1"
                   max="100000"
                   value={configDraft.daily_limit}
                   onChange={(e) => setConfigDraft((p) => ({ ...p, daily_limit: Number(e.target.value) }))}
-                  className="w-full bg-surface-container-low border border-black/10 rounded-xl px-3 py-1.5 text-body-sm text-on-surface focus:border-midnight-ink focus:ring-1 focus:ring-midnight-ink outline-none transition-colors"
+                  className="input-base w-full"
                 />
               </div>
             </div>
             <div className="flex justify-end">
               <button
                 onClick={onSave}
-                className={`px-4 py-1.5 rounded-full font-label-caps text-label-caps transition-colors ${
-                  saved ? "bg-emerald-100 text-emerald-700" : "bg-midnight-ink text-white hover:bg-prussian-navy"
+                className={`px-4 py-1.5 rounded-full font-label-caps text-label-caps transition-all duration-200 ${
+                  saved ? "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400" : "bg-midnight-ink dark:bg-dark-primary-container text-white dark:text-dark-on-primary hover:bg-prussian-navy dark:hover:opacity-90 active:scale-95"
                 }`}
               >
                 {saved ? "Saved" : "Save"}
@@ -382,18 +381,18 @@ function SettingsBar({ configDraft, setConfigDraft, onSave, saved, onTogglePause
 
 function ViewSwitcher({ active, onChange }) {
   return (
-    <div className="flex items-center bg-surface-container rounded-xl p-0.5 border border-black/5">
+    <div className="flex items-center bg-surface-container dark:bg-dark-surface-container-highest rounded-xl p-0.5 border border-black/5 dark:border-dark-outline-variant">
       {VIEWS.map((v) => (
         <button
           key={v.key}
           onClick={() => onChange(v.key)}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-label-caps text-label-caps transition-all ${
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-label-caps text-label-caps transition-all duration-200 ${
             active === v.key
-              ? "bg-white text-midnight-ink shadow-sm"
-              : "text-on-surface-variant hover:text-midnight-ink"
+              ? "bg-white dark:bg-dark-surface-container-high text-midnight-ink dark:text-dark-on-surface shadow-sm"
+              : "text-on-surface-variant dark:text-dark-on-surface-variant hover:text-midnight-ink dark:hover:text-dark-on-surface"
           }`}
         >
-          <span className="material-symbols-outlined text-[16px]">{v.icon}</span>
+          <span className="material-symbols-outlined text-[16px] text-on-surface-variant dark:text-dark-on-surface-variant">{v.icon}</span>
           {v.label}
         </button>
       ))}
@@ -453,12 +452,12 @@ function BoardView({ jobs, expanded, onToggle, actions, masterPrompt, saving, on
           <div key={col.key} className="flex flex-col min-h-0">
             <div className="flex items-center gap-2 px-1 py-2">
               <span className={`w-2 h-2 rounded-full ${meta.dot}`}></span>
-              <span className="font-label-caps text-label-caps text-on-surface-variant">{col.label}</span>
-              <span className="font-mono-data text-mono-data text-on-surface-variant/60">{items.length}</span>
+                <span className="font-label-caps text-label-caps text-on-surface-variant dark:text-dark-on-surface-variant">{col.label}</span>
+                <span className="font-mono-data text-mono-data text-on-surface-variant/60 dark:text-dark-on-surface-variant/60">{items.length}</span>
               {col.key === "done" && items.length > 0 && (
                 <button
                   onClick={onClearDone}
-                  className="flex items-center gap-1 ml-auto px-3 py-1 rounded-full text-[13px] font-label-caps text-label-caps bg-rose-50 text-rose-600 hover:bg-rose-100 transition-colors"
+                  className="flex items-center gap-1 ml-auto px-3 py-1 rounded-full text-[13px] font-label-caps text-label-caps bg-rose-50 dark:bg-rose-900/20 text-rose-600 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-900/30 transition-all duration-200 active:scale-95"
                 >
                   <span className="material-symbols-outlined text-[14px]">delete_sweep</span>
                   Clear all
@@ -467,7 +466,7 @@ function BoardView({ jobs, expanded, onToggle, actions, masterPrompt, saving, on
             </div>
             <div className="flex-1 flex flex-col gap-1.5 overflow-y-auto min-h-0 pb-4">
               {items.length === 0 ? (
-                <div className="flex items-center justify-center py-8 text-on-surface-variant/40 font-body-sm text-body-sm">
+                <div className="flex items-center justify-center py-8 text-on-surface-variant/40 dark:text-dark-on-surface-variant/40 font-body-sm text-body-sm rounded-xl border border-dashed border-black/10 dark:border-dark-outline-variant/30">
                   Empty
                 </div>
               ) : (
@@ -494,8 +493,8 @@ function BoardView({ jobs, expanded, onToggle, actions, masterPrompt, saving, on
 
 function TableView({ jobs, expanded, onToggle, actions, masterPrompt, saving }) {
   return (
-    <div className="rounded-2xl border border-black/5 bg-white/60 overflow-hidden">
-      <div className="grid grid-cols-[44px_1fr_120px_1fr_80px] gap-2 px-3 py-2 border-b border-black/5 bg-surface-container-low/50 font-label-caps text-label-caps text-on-surface-variant">
+    <div className="rounded-2xl border border-black/5 dark:border-dark-outline-variant bg-white/60 dark:bg-dark-surface-container-high overflow-hidden">
+      <div className="grid grid-cols-[44px_1fr_120px_1fr_80px] gap-2 px-3 py-2 border-b border-black/5 dark:border-dark-outline-variant/50 bg-surface-container-low/50 dark:bg-dark-surface-container-highest/50 font-label-caps text-label-caps text-on-surface-variant dark:text-dark-on-surface-variant">
         <span></span>
         <span>Filename</span>
         <span>Status</span>
@@ -504,7 +503,7 @@ function TableView({ jobs, expanded, onToggle, actions, masterPrompt, saving }) 
       </div>
       <div className="max-h-[600px] overflow-y-auto">
         {jobs.length === 0 ? (
-          <div className="flex items-center justify-center py-12 text-on-surface-variant/40 font-body-sm text-body-sm">
+          <div className="flex items-center justify-center py-12 text-on-surface-variant/40 dark:text-dark-on-surface-variant/40 font-body-sm text-body-sm">
             No jobs
           </div>
         ) : (
@@ -513,9 +512,9 @@ function TableView({ jobs, expanded, onToggle, actions, masterPrompt, saving }) 
             const meta = STATUS_META[job.status] || STATUS_META.queued;
             const isRunning = job.status === "running";
             return (
-              <div key={job.id} className="group grid grid-cols-[44px_1fr_120px_1fr_80px] gap-2 px-3 py-2 border-b border-black/3 hover:bg-surface-container-low/50 transition-colors items-center">
+              <div key={job.id} className="group grid grid-cols-[44px_1fr_120px_1fr_80px] gap-2 px-3 py-2 border-b border-black/3 dark:border-dark-outline-variant/30 hover:bg-surface-container-low/50 dark:hover:bg-dark-surface-container transition-colors duration-200 items-center">
                 <Thumb src={job.thumb} alt={filename} size="w-8 h-8" />
-                <span className="font-body-sm text-body-sm text-midnight-ink truncate">{filename}</span>
+                <span className="font-body-sm text-body-sm text-midnight-ink dark:text-dark-on-surface truncate">{filename}</span>
                 <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-label-caps text-label-caps w-fit ${meta.color}`}>
                   {isRunning && <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse"></span>}
                   {meta.label}
@@ -566,11 +565,17 @@ export default function Ai() {
     }
   }, []);
 
+  const hasActiveJobs = useMemo(
+    () => jobs.some((j) => j.status === "queued" || j.status === "running"),
+    [jobs],
+  );
+
   useEffect(() => {
     refresh();
-    const id = setInterval(refresh, 4000);
+    const interval = hasActiveJobs ? 4000 : 15000;
+    const id = setInterval(refresh, interval);
     return () => clearInterval(id);
-  }, [refresh]);
+  }, [refresh, hasActiveJobs]);
 
   useEffect(() => {
     getAiConfig()
@@ -735,7 +740,7 @@ export default function Ai() {
           {/* Header */}
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-3">
-              <h1 className="font-headline-md text-headline-md text-midnight-ink tracking-tight font-bold">AI Control</h1>
+              <h1 className="font-headline-md text-headline-md text-midnight-ink dark:text-dark-on-surface tracking-tight font-bold">AI Control</h1>
               <LiveDot active={!status?.paused && (queued.length > 0)} />
             </div>
             <div className="flex items-center gap-2">
@@ -743,7 +748,7 @@ export default function Ai() {
               <button
                 onClick={handleTagAllUntagged}
                 disabled={tagAllBusy || untaggedCount === 0}
-                className="flex items-center gap-1.5 bg-emerald-600 text-white px-3 py-1.5 rounded-full font-label-caps text-label-caps hover:bg-emerald-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                className="flex items-center gap-1.5 bg-emerald-600 text-white px-3 py-1.5 rounded-full font-label-caps text-label-caps hover:bg-emerald-700 transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed active:scale-95"
               >
                 <span className="material-symbols-outlined text-[14px]">auto_awesome</span>
                 {tagAllBusy ? "Tagging..." : `Tag all untagged (${untaggedCount})`}
@@ -751,7 +756,7 @@ export default function Ai() {
               {failedCount > 0 && (
                 <button
                   onClick={retryAll}
-                  className="flex items-center gap-1.5 bg-midnight-ink text-white px-3 py-1.5 rounded-full font-label-caps text-label-caps hover:bg-prussian-navy transition-colors"
+                  className="flex items-center gap-1.5 bg-midnight-ink dark:bg-dark-primary-container text-white dark:text-dark-on-primary px-3 py-1.5 rounded-full font-label-caps text-label-caps hover:bg-prussian-navy dark:hover:opacity-90 transition-all duration-200 active:scale-95"
                 >
                   <span className="material-symbols-outlined text-[14px]">refresh</span>
                   Retry {failedCount} failed
@@ -760,7 +765,7 @@ export default function Ai() {
               <button
                 onClick={cancelAll}
                 disabled={queued.length === 0}
-                className="flex items-center gap-1.5 bg-white border border-black/10 text-on-surface-variant px-3 py-1.5 rounded-full font-label-caps text-label-caps hover:bg-surface-container-low transition-colors disabled:opacity-40"
+                className="flex items-center gap-1.5 bg-white dark:bg-dark-surface-container-high border border-black/10 dark:border-dark-outline-variant text-on-surface-variant dark:text-dark-on-surface-variant px-3 py-1.5 rounded-full font-label-caps text-label-caps hover:bg-surface-container-low dark:hover:bg-dark-surface-container transition-all duration-200 disabled:opacity-40"
               >
                 <span className="material-symbols-outlined text-[14px]">block</span>
                 Cancel all
@@ -788,7 +793,7 @@ export default function Ai() {
                 jobs={queued}
                 title="Queued"
                 icon="pending"
-                accent="bg-amber-50 text-amber-700"
+                accent="bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
                 expanded={expanded}
                 onToggle={setExpanded}
                 actions={actions}
@@ -799,7 +804,7 @@ export default function Ai() {
                 jobs={failed}
                 title="Failed"
                 icon="error"
-                accent="bg-rose-50 text-rose-600"
+                accent="bg-rose-50 text-rose-600 dark:bg-rose-900/30 dark:text-rose-400"
                 expanded={expanded}
                 onToggle={setExpanded}
                 actions={actions}
@@ -810,7 +815,7 @@ export default function Ai() {
                 jobs={done}
                 title="Done"
                 icon="check_circle"
-                accent="bg-emerald-50 text-emerald-700"
+                accent="bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400"
                 expanded={expanded}
                 onToggle={setExpanded}
                 actions={actions}
@@ -820,7 +825,7 @@ export default function Ai() {
                   done.length > 0 ? (
                     <button
                       onClick={clearDone}
-                      className="flex items-center gap-1 px-3 py-1 rounded-full text-[13px] font-label-caps text-label-caps bg-rose-50 text-rose-600 hover:bg-rose-100 transition-colors"
+                      className="flex items-center gap-1 px-3 py-1 rounded-full text-[13px] font-label-caps text-label-caps bg-rose-50 dark:bg-rose-900/20 text-rose-600 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-900/30 transition-all duration-200 active:scale-95"
                     >
                       <span className="material-symbols-outlined text-[14px]">delete_sweep</span>
                       Clear all
@@ -832,7 +837,7 @@ export default function Ai() {
                 jobs={canceled}
                 title="Cancelled"
                 icon="block"
-                accent="bg-gray-100 text-gray-500"
+                accent="bg-gray-100 text-gray-500 dark:bg-gray-800/30 dark:text-gray-400"
                 expanded={expanded}
                 onToggle={setExpanded}
                 actions={actions}
@@ -840,10 +845,14 @@ export default function Ai() {
                 saving={saving}
               />
               {jobs.length === 0 && (
-                <div className="flex flex-col items-center justify-center py-16 gap-3 text-center rounded-2xl bg-white/40 border border-black/5">
-                  <span className="material-symbols-outlined text-3xl text-on-surface-variant/40">auto_awesome</span>
-                  <p className="font-title-sm text-title-sm text-midnight-ink">No jobs in the queue</p>
-                  <p className="font-body-sm text-body-sm text-on-surface-variant max-w-xs">
+                <div className="flex flex-col items-center justify-center py-16 gap-3 text-center rounded-2xl bg-white/40 dark:bg-dark-surface-container-high border border-black/5 dark:border-dark-outline-variant animate-fade-in-up">
+                  <div className="empty-state-icon">
+                    <span className="material-symbols-outlined text-3xl text-on-surface-variant dark:text-dark-on-surface-variant">
+                      auto_awesome
+                    </span>
+                  </div>
+                  <p className="font-title-sm text-title-sm text-midnight-ink dark:text-dark-on-surface">No jobs in the queue</p>
+                  <p className="font-body-sm text-body-sm text-on-surface-variant dark:text-dark-on-surface-variant max-w-xs">
                     Select photos in the gallery and hit Tag to start.
                   </p>
                 </div>
@@ -877,7 +886,7 @@ export default function Ai() {
       </div>
 
       {toast && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[60] bg-on-surface text-surface-container-lowest px-4 py-2 rounded-full font-body-sm text-body-sm shadow-lg">
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[60] bg-inverse-surface dark:bg-dark-on-surface text-inverse-on-surface dark:text-dark-surface px-4 py-2 rounded-full font-body-sm text-body-sm shadow-soft-lg dark:shadow-dark-soft-lg toast-enter">
           {toast}
         </div>
       )}

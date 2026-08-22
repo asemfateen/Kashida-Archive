@@ -1,5 +1,6 @@
 import "./env.js";
 import jwt from "jsonwebtoken";
+import { timingSafeEqual } from "node:crypto";
 
 // Single-operator admin auth. Credentials come from the environment
 // (ADMIN_USER / ADMIN_PASS); in development (non-production) they fall back
@@ -18,12 +19,20 @@ export function isAuthConfigured() {
   );
 }
 
+function safeCompare(a, b) {
+  if (typeof a !== "string" || typeof b !== "string") return false;
+  const bufA = Buffer.from(a);
+  const bufB = Buffer.from(b);
+  if (bufA.length !== bufB.length) return false;
+  return timingSafeEqual(bufA, bufB);
+}
+
 export function checkCredentials(username, password) {
   return (
     typeof username === "string" &&
     typeof password === "string" &&
-    username === ADMIN_USER &&
-    password === ADMIN_PASS
+    safeCompare(username, ADMIN_USER) &&
+    safeCompare(password, ADMIN_PASS)
   );
 }
 

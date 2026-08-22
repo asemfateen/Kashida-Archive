@@ -8,10 +8,9 @@ import {
   getFacets,
   searchImages,
 } from "../api.js";
+import { GROUP_TYPE_LABELS } from "../constants.js";
 import FacetPanel from "../components/FacetPanel.jsx";
 import { pushError } from "../notify.jsx";
-
-const GROUP_TYPE_LABELS = { jpg: "JPEG", png: "PNG", raw: "RAW" };
 
 export default function Dashboard({
   images,
@@ -447,8 +446,8 @@ export default function Dashboard({
             onOpenImage(item);
           }
         }}
-        className={`masonry-item relative group photo-card rounded-3xl bg-white shadow-soft border border-gray-100 hover:shadow-lg transition-all duration-300 cursor-pointer p-2 ${
-          selected.has(item.object_key) ? "ring-2 ring-midnight-ink" : ""
+        className={`masonry-item relative group photo-card rounded-3xl bg-white dark:bg-dark-surface-container-high shadow-soft dark:shadow-dark-soft border border-black/5 dark:border-dark-outline-variant hover:shadow-soft-lg dark:hover:shadow-dark-soft-lg hover:-translate-y-0.5 transition-all duration-300 cursor-pointer p-2 ${
+          selected.has(item.object_key) ? "ring-2 ring-midnight-ink dark:ring-dark-primary shadow-soft-lg" : ""
         }`}
       >
         <img
@@ -468,7 +467,7 @@ export default function Dashboard({
         />
         <div className="absolute inset-0 bg-black/0 group-hover:bg-black/5 transition-colors duration-300 rounded-3xl z-10 pointer-events-none"></div>
         {selectMode && (
-          <div className="absolute top-3 left-3 z-30 w-7 h-7 rounded-full flex items-center justify-center bg-white/90 backdrop-blur border border-black/5 shadow-sm pointer-events-none">
+          <div className="absolute top-3 left-3 z-30 w-7 h-7 rounded-full flex items-center justify-center bg-white/90 dark:bg-dark-surface-container-highest/90 backdrop-blur border border-black/5 dark:border-dark-outline-variant shadow-sm pointer-events-none">
             <span
               className="material-symbols-outlined text-[18px]"
               style={
@@ -498,7 +497,7 @@ export default function Dashboard({
                   e.stopPropagation();
                   onRestore(item.object_key);
                 }}
-                className="w-8 h-8 rounded-full bg-white/80 backdrop-blur flex items-center justify-center border border-black/5 shadow-sm text-primary"
+                className="w-8 h-8 rounded-full bg-white/80 dark:bg-dark-surface-container-highest/80 backdrop-blur flex items-center justify-center border border-black/5 dark:border-dark-outline-variant shadow-sm text-primary"
                 title="Restore"
               >
                 <span className="material-symbols-outlined text-[16px]">
@@ -510,7 +509,7 @@ export default function Dashboard({
                   e.stopPropagation();
                   onDeleteForever(item.object_key);
                 }}
-                className="w-8 h-8 rounded-full bg-white/80 backdrop-blur flex items-center justify-center border border-black/5 shadow-sm text-error hover:bg-error hover:text-on-error transition-colors"
+                className="w-8 h-8 rounded-full bg-white/80 dark:bg-dark-surface-container-highest/80 backdrop-blur flex items-center justify-center border border-black/5 dark:border-dark-outline-variant shadow-sm text-error hover:bg-error hover:text-on-error transition-colors"
                 title="Delete forever"
               >
                 <span className="material-symbols-outlined text-[16px]">
@@ -525,7 +524,7 @@ export default function Dashboard({
                   e.stopPropagation();
                   handleFavorite(item);
                 }}
-                className="w-8 h-8 rounded-full bg-white/80 backdrop-blur flex items-center justify-center border border-black/5 shadow-sm text-midnight-ink hover:bg-white transition-colors"
+                className="w-8 h-8 rounded-full bg-white/80 dark:bg-dark-surface-container-highest/80 backdrop-blur flex items-center justify-center border border-black/5 dark:border-dark-outline-variant shadow-sm text-midnight-ink hover:bg-white transition-colors"
                 title={
                   item.favorite ? "Remove from favorites" : "Add to favorites"
                 }
@@ -547,7 +546,7 @@ export default function Dashboard({
                   const url = item.url || item.src;
                   if (url) window.open(url, "_blank");
                 }}
-                className="w-8 h-8 rounded-full bg-white/80 backdrop-blur flex items-center justify-center border border-black/5 shadow-sm text-on-surface-variant hover:bg-white transition-colors"
+                className="w-8 h-8 rounded-full bg-white/80 dark:bg-dark-surface-container-highest/80 backdrop-blur flex items-center justify-center border border-black/5 dark:border-dark-outline-variant shadow-sm text-on-surface-variant hover:bg-white transition-colors"
                 title="Download"
               >
                 <span className="material-symbols-outlined text-[16px]">
@@ -581,7 +580,7 @@ export default function Dashboard({
           {/* Asset Grid */}
           <div className="p-margin-page pb-24">
             {selectMode ? (
-              <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
+              <div className="flex items-center justify-between mb-4 gap-3 flex-wrap animate-in-down">
                 <p className="font-body-md text-body-md text-on-surface">
                   <span className="font-label-caps text-label-caps text-primary">
                     {selected.size} selected
@@ -592,13 +591,13 @@ export default function Dashboard({
                     <>
                       <button
                         onClick={() => runBatch("restore")}
-                        className="bg-surface-container-high text-primary font-label-caps text-label-caps px-4 py-2 rounded-full hover:bg-surface-variant transition-colors border border-black/5"
+                        className="bg-surface-container-high text-primary font-label-caps text-label-caps px-4 py-2 rounded-full hover:bg-surface-variant transition-all duration-200 border border-black/5 active:scale-95"
                       >
                         Restore
                       </button>
                       <button
                         onClick={() => runBatch("deleteForever")}
-                        className="bg-error-container text-on-error-container font-label-caps text-label-caps px-4 py-2 rounded-full hover:bg-error hover:text-on-error transition-colors"
+                        className="bg-error-container text-on-error-container font-label-caps text-label-caps px-4 py-2 rounded-full hover:bg-error hover:text-on-error transition-all duration-200 active:scale-95"
                       >
                         Delete forever
                       </button>
@@ -608,7 +607,7 @@ export default function Dashboard({
                       <button
                         onClick={() => setTagModal(true)}
                         disabled={aiBusy}
-                        className="bg-midnight-ink text-white font-label-caps text-label-caps px-4 py-2 rounded-full hover:bg-prussian-navy transition-colors disabled:opacity-50"
+                        className="bg-midnight-ink text-white font-label-caps text-label-caps px-4 py-2 rounded-full hover:bg-prussian-navy transition-all duration-200 disabled:opacity-50 active:scale-95"
                         title="Tag the selected photos with AI or manually"
                       >
                         <span className="flex items-center gap-1.5">
@@ -620,7 +619,7 @@ export default function Dashboard({
                       </button>
                       <button
                         onClick={() => runBatch("trash")}
-                        className="bg-error-container text-on-error-container font-label-caps text-label-caps px-4 py-2 rounded-full hover:bg-error hover:text-on-error transition-colors"
+                        className="bg-error-container text-on-error-container font-label-caps text-label-caps px-4 py-2 rounded-full hover:bg-error hover:text-on-error transition-all duration-200 active:scale-95"
                       >
                         Move to Trash
                       </button>
@@ -628,7 +627,7 @@ export default function Dashboard({
                   )}
                   <button
                     onClick={clearSelection}
-                    className="bg-surface-container-high text-on-surface-variant font-label-caps text-label-caps px-4 py-2 rounded-full hover:bg-surface-variant transition-colors border border-black/5"
+                    className="bg-surface-container-high text-on-surface-variant font-label-caps text-label-caps px-4 py-2 rounded-full hover:bg-surface-variant transition-all duration-200 border border-black/5 active:scale-95"
                   >
                     Cancel
                   </button>
@@ -638,7 +637,7 @@ export default function Dashboard({
               <div className="flex items-center justify-between mb-8">
                 <button
                   onClick={() => setSelectMode(true)}
-                  className="flex items-center gap-2 bg-midnight-ink text-white px-5 py-2.5 rounded-full hover:bg-prussian-navy transition-colors text-sm font-medium shadow-sm"
+                  className="flex items-center gap-2 bg-midnight-ink text-white px-5 py-2.5 rounded-full hover:bg-prussian-navy transition-all duration-200 text-sm font-medium shadow-sm active:scale-95"
                 >
                   <span className="material-symbols-outlined text-[18px]">
                     check_box
@@ -658,7 +657,7 @@ export default function Dashboard({
                 </p>
                 <button
                   onClick={onEmptyTrash}
-                  className="bg-error-container text-on-error-container font-label-caps text-label-caps px-4 py-2 rounded-full hover:bg-error hover:text-on-error transition-colors"
+                  className="bg-error-container text-on-error-container font-label-caps text-label-caps px-4 py-2 rounded-full hover:bg-error hover:text-on-error transition-all duration-200 active:scale-95"
                 >
                   Empty Trash
                 </button>
@@ -697,7 +696,7 @@ export default function Dashboard({
                   <select
                     value={groupBy}
                     onChange={(e) => setGroupBy(e.target.value)}
-                    className="bg-surface-container-low border border-black/5 rounded-xl px-3 py-1.5 text-sm font-body-sm text-on-surface focus:border-midnight-ink outline-none"
+                    className="bg-surface-container-low dark:bg-dark-surface-container-high border border-black/5 dark:border-dark-outline-variant rounded-xl px-3 py-1.5 text-sm font-body-sm text-on-surface dark:text-dark-on-surface focus:border-midnight-ink dark:focus:border-dark-primary outline-none"
                   >
                     <option value="none">Group: None</option>
                     <option value="tag">Group: Tag</option>
@@ -717,8 +716,8 @@ export default function Dashboard({
               </div>
             )}
             {!loading && !loadError && galleryItems.length === 0 && (
-              <div className="flex flex-col items-center justify-center min-h-[55vh] gap-4 text-center">
-                <div className="w-16 h-16 rounded-3xl bg-surface-container-low flex items-center justify-center">
+              <div className="flex flex-col items-center justify-center min-h-[55vh] gap-4 text-center animate-in-up">
+                <div className="empty-state-icon animate-float">
                   <span className="material-symbols-outlined text-3xl text-on-surface-variant">
                     {activeFilter === "trash"
                       ? "delete"
@@ -738,7 +737,7 @@ export default function Dashboard({
                           ? "No images yet"
                           : "No assets match the active filters"}
                 </p>
-                <p className="font-body-sm text-body-sm text-on-surface-variant">
+                <p className="font-body-sm text-body-sm text-on-surface-variant max-w-sm">
                   {results !== null
                     ? "Try clearing the search or choosing another view."
                     : activeFilter === "trash"
@@ -758,7 +757,7 @@ export default function Dashboard({
                     else if (images.length === 0) onUpload();
                     else onFilter("all");
                   }}
-                  className="mt-2 bg-midnight-ink hover:bg-prussian-navy text-white px-5 py-2.5 rounded-full font-label-caps text-label-caps transition-colors"
+                  className="mt-2 btn-pill-primary px-5 py-2.5"
                 >
                   {results !== null
                     ? "Clear search"
@@ -771,20 +770,27 @@ export default function Dashboard({
               </div>
             )}
             {loading && (
-              <div className="flex items-center justify-center py-24 gap-3">
-                <span className="material-symbols-outlined text-2xl text-on-surface-variant animate-spin">
-                  progress_activity
-                </span>
+              <div className="flex flex-col items-center justify-center py-24 gap-4 animate-fade-in">
+                <div className="w-16 h-16 rounded-3xl bg-surface-container-high dark:bg-dark-surface-container-high flex items-center justify-center">
+                  <span className="material-symbols-outlined text-2xl text-on-surface-variant animate-spin">
+                    progress_activity
+                  </span>
+                </div>
                 <p className="font-body-md text-body-md text-on-surface-variant">
                   Loading library...
                 </p>
+                <div className="w-48 h-1 bg-surface-container-high dark:bg-dark-surface-container-highest rounded-full overflow-hidden">
+                  <div className="h-full bg-midnight-ink/20 dark:bg-dark-primary/20 rounded-full progress-bar-anim" />
+                </div>
               </div>
             )}
             {loadError && !loading && (
-              <div className="flex flex-col items-center justify-center py-24 gap-3 text-center">
-                <span className="material-symbols-outlined text-5xl text-error">
-                  cloud_off
-                </span>
+              <div className="flex flex-col items-center justify-center py-24 gap-3 text-center animate-fade-in-up">
+                <div className="w-16 h-16 rounded-3xl bg-error/10 flex items-center justify-center">
+                  <span className="material-symbols-outlined text-3xl text-error">
+                    cloud_off
+                  </span>
+                </div>
                 <p className="font-title-sm text-title-sm text-on-surface">
                   Couldn't load the library
                 </p>
@@ -793,7 +799,7 @@ export default function Dashboard({
                 </p>
                 <button
                   onClick={onRetry}
-                  className="mt-2 bg-midnight-ink hover:bg-prussian-navy text-white px-5 py-2.5 rounded-full font-label-caps text-label-caps transition-colors"
+                  className="mt-2 btn-pill-primary px-5 py-2.5"
                 >
                   Retry
                 </button>
@@ -843,18 +849,18 @@ export default function Dashboard({
                 onClick={toggleRight}
                 title="Expand panel"
                 aria-label="Expand panel"
-                className="w-12 h-12 flex items-center justify-center text-on-surface-variant hover:text-midnight-ink hover:bg-white shadow-sm transition-all rounded-2xl bg-white/40 shrink-0"
+                className="w-12 h-12 flex items-center justify-center text-on-surface-variant dark:text-dark-on-surface-variant hover:text-midnight-ink dark:hover:text-dark-primary hover:bg-surface-container dark:hover:bg-dark-surface-container-high shadow-sm transition-all duration-200 rounded-2xl bg-white/40 dark:bg-white/[0.04] shrink-0 active:scale-95"
               >
                 <span className="material-symbols-outlined text-sm">
                   chevron_left
                 </span>
               </button>
-              <div className="w-8 h-px bg-black/10"></div>
+              <div className="w-8 h-px bg-black/10 dark:bg-white/[0.08]"></div>
               <button
                 onClick={exportJson}
                 title="Download"
                 aria-label="Download"
-                className="w-12 h-12 flex items-center justify-center text-on-surface-variant hover:text-midnight-ink hover:bg-white shadow-sm transition-all rounded-2xl bg-white/40"
+                className="w-12 h-12 flex items-center justify-center text-on-surface-variant dark:text-dark-on-surface-variant hover:text-midnight-ink dark:hover:text-dark-primary hover:bg-surface-container dark:hover:bg-dark-surface-container-high shadow-sm transition-all duration-200 rounded-2xl bg-white/40 dark:bg-white/[0.04] active:scale-95"
               >
                 <span className="material-symbols-outlined text-sm">
                   download
@@ -864,7 +870,7 @@ export default function Dashboard({
                 onClick={shareLink}
                 title="Share"
                 aria-label="Share"
-                className="w-12 h-12 flex items-center justify-center text-on-surface-variant hover:text-midnight-ink hover:bg-white shadow-sm transition-all rounded-2xl bg-white/40"
+                className="w-12 h-12 flex items-center justify-center text-on-surface-variant dark:text-dark-on-surface-variant hover:text-midnight-ink dark:hover:text-dark-primary hover:bg-surface-container dark:hover:bg-dark-surface-container-high shadow-sm transition-all duration-200 rounded-2xl bg-white/40 dark:bg-white/[0.04] active:scale-95"
               >
                 <span className="material-symbols-outlined text-sm">share</span>
               </button>
@@ -876,22 +882,22 @@ export default function Dashboard({
                   onClick={toggleRight}
                   title="Collapse panel"
                   aria-label="Collapse panel"
-                  className="p-3 text-midnight-ink bg-white shadow-soft hover:bg-gray-50 transition-colors cursor-pointer active:scale-95 rounded-2xl shrink-0"
+                  className="p-3 text-midnight-ink dark:text-dark-on-surface bg-white dark:bg-dark-surface-container-high shadow-soft dark:shadow-dark-soft hover:bg-gray-50 dark:hover:bg-dark-surface-container-highest transition-all duration-200 cursor-pointer active:scale-95 rounded-2xl shrink-0"
                 >
                   <span className="material-symbols-outlined">
                     chevron_right
                   </span>
                 </button>
-                <span className="text-sm font-semibold text-midnight-ink">
+                <span className="text-sm font-semibold text-midnight-ink dark:text-dark-on-surface">
                   Tools
                 </span>
               </div>
-              <div className="flex flex-col gap-3 px-3">
+              <div className="flex flex-col gap-2 px-3">
                 <button
                   onClick={exportJson}
                   title="Download current view as JSON"
                   aria-label="Download current view as JSON"
-                  className="h-12 w-full px-3 flex items-center gap-3 rounded-2xl text-on-surface-variant bg-white/40 hover:bg-white hover:text-midnight-ink shadow-sm active:scale-95 transition-all cursor-pointer"
+                  className="h-12 w-full px-3 flex items-center gap-3 rounded-2xl text-on-surface-variant dark:text-dark-on-surface-variant bg-white/40 dark:bg-white/[0.04] hover:bg-surface-container dark:hover:bg-dark-surface-container-high hover:text-midnight-ink dark:hover:text-dark-primary shadow-sm active:scale-95 transition-all duration-200 cursor-pointer"
                 >
                   <span className="material-symbols-outlined text-sm shrink-0">
                     download
@@ -902,7 +908,7 @@ export default function Dashboard({
                   onClick={shareLink}
                   title="Copy share link"
                   aria-label="Copy share link"
-                  className="h-12 w-full px-3 flex items-center gap-3 rounded-2xl text-on-surface-variant bg-white/40 hover:bg-white hover:text-midnight-ink shadow-sm active:scale-95 transition-all cursor-pointer"
+                  className="h-12 w-full px-3 flex items-center gap-3 rounded-2xl text-on-surface-variant dark:text-dark-on-surface-variant bg-white/40 dark:bg-white/[0.04] hover:bg-surface-container dark:hover:bg-dark-surface-container-high hover:text-midnight-ink dark:hover:text-dark-primary shadow-sm active:scale-95 transition-all duration-200 cursor-pointer"
                 >
                   <span className="material-symbols-outlined text-sm shrink-0">
                     share
@@ -910,7 +916,7 @@ export default function Dashboard({
                   <span className="text-sm font-medium">Share</span>
                 </button>
               </div>
-              <div className="mx-3 my-6 h-px bg-black/10"></div>
+              <div className="mx-3 my-6 h-px bg-black/10 dark:bg-white/[0.08]"></div>
               <div className="px-3">
                 {results !== null ? (
                   <FacetPanel
@@ -924,7 +930,7 @@ export default function Dashboard({
                   />
                 ) : (
                   <>
-                    <h3 className="text-sm font-semibold text-midnight-ink mb-4">
+                    <h3 className="text-sm font-semibold text-midnight-ink dark:text-dark-on-surface mb-4">
                       Recent Tags
                     </h3>
                     <div className="flex flex-col gap-2">
@@ -935,7 +941,7 @@ export default function Dashboard({
                             setQuery(tag);
                             runSearch(null, tag);
                           }}
-                          className="group h-12 w-full px-3 flex items-center justify-between gap-2 rounded-2xl text-on-surface-variant bg-white/40 hover:bg-white hover:text-midnight-ink shadow-sm transition-all cursor-pointer"
+                          className="group h-12 w-full px-3 flex items-center justify-between gap-2 rounded-2xl text-on-surface-variant dark:text-dark-on-surface-variant bg-white/40 dark:bg-white/[0.04] hover:bg-surface-container dark:hover:bg-dark-surface-container-high hover:text-midnight-ink dark:hover:text-dark-primary shadow-sm transition-all cursor-pointer"
                         >
                           <div className="flex items-center gap-3 min-w-0">
                             <span className="material-symbols-outlined text-sm shrink-0">
@@ -965,16 +971,16 @@ export default function Dashboard({
       </div>
 
       {tagModal && (
-        <div className="fixed inset-0 z-[70] bg-black/30 flex items-center justify-center p-4">
-          <div className="w-full max-w-md bg-white rounded-[2rem] shadow-soft border border-black/5 p-6 flex flex-col gap-5">
+        <div className="fixed inset-0 z-[70] bg-black/30 flex items-center justify-center p-4 modal-backdrop" role="dialog" aria-modal="true" aria-label="Tag photos">
+          <div className="w-full max-w-md bg-white dark:bg-dark-surface-container-high rounded-[2rem] shadow-soft-lg dark:shadow-dark-soft-lg border border-black/5 dark:border-dark-outline-variant p-6 flex flex-col gap-5 animate-in-up">
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-bold text-midnight-ink tracking-tight">
+              <h2 className="text-lg font-bold text-midnight-ink dark:text-dark-on-surface tracking-tight">
                 Tag {selected.size} photo{selected.size === 1 ? "" : "s"}
               </h2>
               <button
                 onClick={closeTagModal}
                 disabled={aiBusy}
-                className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-surface-container-low text-on-surface-variant transition-colors disabled:opacity-40"
+                className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-surface-container-low dark:hover:bg-dark-surface-container-highest text-on-surface-variant dark:text-dark-on-surface-variant transition-colors disabled:opacity-40"
                 aria-label="Close tag dialog"
               >
                 <span className="material-symbols-outlined text-[18px]">
@@ -990,7 +996,7 @@ export default function Dashboard({
               <button
                 onClick={runAITag}
                 disabled={aiBusy}
-                className="flex items-center justify-center gap-2 bg-midnight-ink text-white px-4 py-2.5 rounded-full text-sm font-medium hover:bg-prussian-navy transition-colors disabled:opacity-60"
+                className="flex items-center justify-center gap-2 bg-midnight-ink text-white px-4 py-2.5 rounded-full text-sm font-medium hover:bg-prussian-navy transition-all duration-200 disabled:opacity-60 active:scale-95"
               >
                 {aiBusy ? (
                   <>
@@ -1028,7 +1034,7 @@ export default function Dashboard({
               </div>
             )}
 
-            <div className="h-px bg-black/5"></div>
+            <div className="h-px bg-black/5 dark:bg-white/[0.06]"></div>
 
             <div className="flex flex-col gap-2">
               <label className="font-label-caps text-label-caps text-on-surface-variant">
@@ -1044,7 +1050,7 @@ export default function Dashboard({
                     runManualTag();
                   }
                 }}
-                className="w-full bg-surface-container-low border border-black/5 rounded-xl px-3 py-2.5 text-body-md text-on-surface focus:border-midnight-ink focus:ring-1 focus:ring-midnight-ink outline-none transition-colors disabled:opacity-60"
+                className="input-base w-full disabled:opacity-60"
                 placeholder="e.g. news, breaking, politics"
               />
               {recentTags.length > 0 && (
@@ -1054,7 +1060,7 @@ export default function Dashboard({
                       key={tag}
                       onClick={() => addQuickTag(tag)}
                       disabled={aiBusy}
-                      className="px-2.5 py-1 rounded-full bg-surface-container-low text-on-surface-variant text-xs font-medium hover:bg-white hover:text-midnight-ink hover:shadow-soft border border-black/5 transition-all disabled:opacity-50"
+                      className="px-2.5 py-1 rounded-full bg-surface-container-low dark:bg-dark-surface-container-highest text-on-surface-variant dark:text-dark-on-surface-variant text-xs font-medium hover:bg-surface-container dark:hover:bg-dark-surface-container-high hover:text-midnight-ink dark:hover:text-dark-primary hover:shadow-soft border border-black/5 dark:border-dark-outline-variant transition-all duration-150 disabled:opacity-50"
                     >
                       {tag}
                     </button>
@@ -1064,7 +1070,7 @@ export default function Dashboard({
               <button
                 onClick={runManualTag}
                 disabled={aiBusy}
-                className="flex items-center justify-center gap-2 bg-white border border-black/10 text-midnight-ink px-4 py-2.5 rounded-full text-sm font-medium hover:bg-surface-container-low transition-colors disabled:opacity-60"
+                className="flex items-center justify-center gap-2 bg-white dark:bg-dark-surface-container border border-black/10 dark:border-dark-outline-variant text-midnight-ink dark:text-dark-on-surface px-4 py-2.5 rounded-full text-sm font-medium hover:bg-surface-container-low dark:hover:bg-dark-surface-container-high transition-all duration-200 disabled:opacity-60 active:scale-95"
               >
                 <span className="material-symbols-outlined text-[18px]">
                   sell
@@ -1077,7 +1083,7 @@ export default function Dashboard({
             </div>
 
             {tagFailures.length > 0 && (
-              <div className="flex flex-col gap-1.5 bg-error/10 border border-error/30 rounded-2xl p-3 max-h-40 overflow-y-auto">
+              <div className="flex flex-col gap-1.5 bg-error/10 border border-error/30 rounded-2xl p-3 max-h-40 overflow-y-auto animate-fade-in">
                 <p className="font-label-caps text-label-caps text-error">
                   {tagFailures.length} failed
                 </p>
@@ -1097,7 +1103,7 @@ export default function Dashboard({
       )}
 
       {toast && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[60] bg-on-surface text-surface-container-lowest px-4 py-2 rounded-full font-body-sm text-body-sm shadow-lg">
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[60] bg-midnight-ink dark:bg-dark-primary-container text-white dark:text-dark-on-primary px-5 py-2.5 rounded-full font-body-sm text-body-sm shadow-soft-lg dark:shadow-dark-soft-lg toast-enter">
           {toast}
         </div>
       )}

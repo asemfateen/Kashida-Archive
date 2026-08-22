@@ -2,38 +2,426 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ═══════════════════════════════════════════════════════════
+   BASE LAYER — Global resets & defaults
+   ═══════════════════════════════════════════════════════════ */
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    overflow: hidden;
+  }
+
+  /* ── Selection ─────────────────────────────────────── */
+  ::selection {
+    background: rgba(9, 20, 38, 0.12);
+    color: inherit;
+  }
+
+  .dark ::selection {
+    background: rgba(224, 224, 228, 0.2);
+  }
+
+  /* ── Focus ring (global default) ───────────────────── */
+  :focus-visible {
+    outline: 2px solid rgba(9, 20, 38, 0.35);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  .dark :focus-visible {
+    outline-color: rgba(224, 224, 228, 0.35);
+  }
+
+  /* ── Focus ring removal for mouse users ────────────── */
+  :focus:not(:focus-visible) {
+    outline: none;
+  }
+
+  /* ── Reduced motion ────────────────────────────────── */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   COMPONENT LAYER — Reusable patterns
+   ═══════════════════════════════════════════════════════════ */
+
+@layer components {
+  /* ── Glass card (light mode) ───────────────────────── */
+  .glass-card {
+    @apply bg-white/80 backdrop-blur-xl border border-white/20 shadow-soft;
+  }
+
+  .dark .glass-card {
+    @apply bg-white/5 border-white/10 shadow-dark-soft;
+  }
+
+  /* ── Pill button base ──────────────────────────────── */
+  .btn-pill {
+    @apply rounded-full font-label-caps text-label-caps transition-all duration-200 cursor-pointer;
+  }
+
+  .btn-pill-primary {
+    @apply btn-pill bg-midnight-ink text-white hover:bg-prussian-navy active:scale-95 shadow-sm;
+  }
+
+  .dark .btn-pill-primary {
+    @apply bg-dark-primary-container text-dark-on-primary hover:opacity-90;
+  }
+
+  .btn-pill-secondary {
+    @apply btn-pill bg-white/60 text-on-surface border border-black/5 hover:bg-white hover:shadow-soft active:scale-95;
+  }
+
+  .dark .btn-pill-secondary {
+    @apply bg-white/5 text-dark-on-surface border-dark-outline-variant hover:bg-white/10;
+  }
+
+  /* ── Section card ──────────────────────────────────── */
+  .section-card {
+    @apply bg-surface-container-lowest border border-outline-variant rounded-xl;
+  }
+
+  .dark .section-card {
+    @apply bg-dark-surface-container border-dark-outline-variant;
+  }
+
+  /* ── Floating toolbar ──────────────────────────────── */
+  .floating-bar {
+    @apply bg-white/90 backdrop-blur-xl border border-black/[0.06] shadow-soft-lg rounded-full;
+  }
+
+  .dark .floating-bar {
+    @apply bg-dark-surface-container-highest/90 border-dark-outline-variant shadow-dark-soft-lg;
+  }
+
+  /* ── Input base ────────────────────────────────────── */
+  .input-base {
+    @apply bg-surface-container-low border border-black/5 rounded-xl px-3 py-2.5 text-body-md text-on-surface transition-all duration-200 placeholder:text-on-surface-variant/40;
+  }
+
+  .input-base:focus {
+    @apply border-midnight-ink ring-2 ring-midnight-ink/10;
+  }
+
+  .dark .input-base {
+    @apply bg-dark-surface-container-high border-dark-outline-variant text-dark-on-surface placeholder:text-dark-on-surface-variant/40;
+  }
+
+  .dark .input-base:focus {
+    @apply border-dark-primary ring-2 ring-dark-primary/20;
+  }
+
+  /* ── Empty state icon container ────────────────────── */
+  .empty-state-icon {
+    @apply w-20 h-20 rounded-3xl bg-surface-container-low flex items-center justify-center;
+  }
+
+  .dark .empty-state-icon {
+    @apply bg-dark-surface-container-high;
+  }
+
+  /* ── Toast base ────────────────────────────────────── */
+  .toast-base {
+    @apply px-4 py-2.5 rounded-2xl font-body-sm text-body-sm shadow-soft-lg backdrop-blur-sm;
+  }
+
+  /* ── Tag chip ──────────────────────────────────────── */
+  .tag-chip {
+    @apply inline-flex items-center gap-1.5 bg-surface-container-low border border-black/5 text-on-surface font-body-sm text-body-sm px-2.5 py-1 rounded-full transition-all duration-200;
+  }
+
+  .dark .tag-chip {
+    @apply bg-dark-surface-container-high border-dark-outline-variant text-dark-on-surface;
+  }
+
+  /* ── Kbd key ───────────────────────────────────────── */
+  .kbd-key {
+    @apply bg-surface-container-high border border-outline-variant rounded-lg px-2.5 py-1 font-mono-data text-mono-data text-xs shadow-inner-glow;
+  }
+
+  .dark .kbd-key {
+    @apply bg-dark-surface-container-highest border-dark-outline-variant text-dark-on-surface-variant;
+  }
+
+  /* ── Active nav indicator ──────────────────────────── */
+  .nav-active {
+    @apply bg-midnight-ink text-white shadow-sm;
+  }
+
+  .dark .nav-active {
+    @apply bg-dark-primary-container text-dark-on-primary;
+  }
+
+  /* ── Card hover ────────────────────────────────────── */
+  .card-hover {
+    @apply transition-all duration-300 ease-out;
+  }
+
+  .card-hover:hover {
+    @apply shadow-soft-md -translate-y-0.5;
+  }
+
+  .dark .card-hover:hover {
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25), 0 8px 24px -4px rgba(0, 0, 0, 0.3);
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   UTILITIES LAYER — Ad-hoc helpers
+   ═══════════════════════════════════════════════════════════ */
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(0, 0, 0, 0.12) transparent;
+  }
+
+  .dark .scrollbar-thin {
+    scrollbar-color: rgba(255, 255, 255, 0.08) transparent;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   DARK MODE OVERRIDES — Unlayered (higher specificity)
+   ═══════════════════════════════════════════════════════════ */
+
+/* ── Dark mode overrides for common surface classes ── */
+.dark .bg-surface-container {
+  @apply bg-dark-surface-container;
+}
+
+.dark .bg-surface-container-low {
+  @apply bg-dark-surface-container-low;
+}
+
+.dark .bg-surface-container-lowest {
+  @apply bg-dark-surface;
+}
+
+.dark .bg-surface-container-high {
+  @apply bg-dark-surface-container-high;
+}
+
+.dark .bg-surface-container-highest {
+  @apply bg-dark-surface-container-highest;
+}
+
+.dark .bg-background {
+  @apply bg-dark-surface;
+}
+
+.dark .bg-surface-variant {
+  @apply bg-dark-surface-container-high;
+}
+
+.dark .bg-white {
+  @apply bg-dark-surface-container;
+}
+
+.dark .bg-white\/80 {
+  background-color: rgba(10, 10, 15, 0.85);
+}
+
+.dark .bg-white\/90 {
+  background-color: rgba(10, 10, 15, 0.92);
+}
+
+.dark .bg-white\/40 {
+  background-color: rgba(10, 10, 15, 0.4);
+}
+
+.dark .bg-white\/60 {
+  background-color: rgba(10, 10, 15, 0.6);
+}
+
+.dark .bg-black\/5 {
+  background-color: rgba(255, 255, 255, 0.04);
+}
+
+.dark .bg-black\/10 {
+  background-color: rgba(255, 255, 255, 0.06);
+}
+
+.dark .bg-black\/30 {
+  background-color: rgba(0, 0, 0, 0.5);
+}
+
+.dark .bg-black\/40 {
+  background-color: rgba(0, 0, 0, 0.6);
+}
+
+.dark .bg-gray-50 {
+  background-color: #08080C;
+}
+
+/* ── Dark text overrides ───────────────────────────── */
+.dark .text-midnight-ink,
+.dark .text-primary,
+.dark .text-on-surface {
+  @apply text-dark-on-surface;
+}
+
+.dark .text-on-surface-variant {
+  @apply text-dark-on-surface-variant;
+}
+
+.dark .text-secondary {
+  @apply text-dark-on-surface-variant;
+}
+
+.dark .text-on-primary {
+  @apply text-dark-on-primary;
+}
+
+.dark .text-tertiary-container {
+  @apply text-dark-primary;
+}
+
+.dark .text-on-error-container {
+  color: #FFB4AB;
+}
+
+/* ── Dark border overrides ─────────────────────────── */
+.dark .border-black\/5 {
+  border-color: rgba(255, 255, 255, 0.06);
+}
+
+.dark .border-black\/10 {
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.dark .border-black\/3 {
+  border-color: rgba(255, 255, 255, 0.04);
+}
+
+.dark .border-outline-variant {
+  border-color: #1E1E28;
+}
+
+/* ── Dark shadow overrides ─────────────────────────── */
+.dark .shadow-soft {
+  @apply shadow-dark-soft;
+}
+
+.dark .shadow-soft-md {
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25), 0 8px 24px -4px rgba(0, 0, 0, 0.3);
+}
+
+.dark .shadow-soft-lg {
+  @apply shadow-dark-soft-lg;
+}
+
+/* ── Dark hover overrides ──────────────────────────── */
+.dark .hover\:bg-white:hover {
+  background-color: #14141C;
+}
+
+.dark .hover\:bg-white\/60:hover {
+  background-color: rgba(10, 10, 15, 0.65);
+}
+
+.dark .hover\:bg-gray-50:hover {
+  background-color: #08080C;
+}
+
+.dark .hover\:bg-surface-container-low:hover {
+  background-color: #08080C;
+}
+
+.dark .hover\:bg-surface-container:hover {
+  background-color: #0E0E16;
+}
+
+.dark .hover\:bg-surface-container-high:hover {
+  background-color: #161620;
+}
+
+.dark .hover\:bg-surface-variant:hover {
+  background-color: #161620;
+}
+
+/* ── Dark border overrides for light-colored borders ── */
+.dark .border-black\/\[0\.03\] {
+  border-color: rgba(255, 255, 255, 0.03);
+}
+
+.dark .border-black\/\[0\.04\] {
+  border-color: rgba(255, 255, 255, 0.04);
+}
+
+.dark .border-black\/\[0\.06\] {
+  border-color: rgba(255, 255, 255, 0.06);
+}
+
+/* ── Dark ring overrides ───────────────────────────── */
+.dark .ring-midnight-ink\/10 {
+  --tw-ring-color: rgba(212, 188, 255, 0.15);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   GLOBAL CUSTOM CLASSES
+   ═══════════════════════════════════════════════════════════ */
+
+/* ── Masonry Grid ───────────────────────────────────── */
 .masonry-grid {
   column-count: 1;
-  column-gap: 32px;
+  column-gap: 24px;
 }
+
 @media (min-width: 640px) {
   .masonry-grid {
     column-count: 2;
   }
 }
+
 @media (min-width: 1024px) {
   .masonry-grid {
     column-count: 3;
   }
 }
+
 @media (min-width: 1440px) {
   .masonry-grid {
     column-count: 4;
   }
 }
+
 .masonry-item {
   break-inside: avoid;
-  margin-bottom: 32px;
+  margin-bottom: 24px;
 }
 
+/* ── Photo Card interactions ────────────────────────── */
 .photo-card:hover .photo-metadata,
 .photo-card:hover .photo-actions {
   opacity: 1;
 }
 
+/* ── Progress bar animation ─────────────────────────── */
 .progress-bar-anim {
   animation: progress 2s ease-in-out infinite alternate;
 }
+
 @keyframes progress {
   0% {
     width: 30%;
@@ -43,14 +431,269 @@
   }
 }
 
+/* ── Custom Scrollbar ───────────────────────────────── */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
 }
+
 ::-webkit-scrollbar-track {
   background: transparent;
 }
+
 ::-webkit-scrollbar-thumb {
-  background-color: #c5c6cd;
-  border-radius: 3px;
+  background-color: rgba(0, 0, 0, 0.1);
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(0, 0, 0, 0.18);
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.06);
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(255, 255, 255, 0.12);
+}
+
+/* ── Toast enter/exit animations ────────────────────── */
+.toast-enter {
+  animation: toast-in 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.toast-exit {
+  animation: toast-out 0.2s ease-in forwards;
+}
+
+@keyframes toast-in {
+  0% {
+    opacity: 0;
+    transform: translateX(-50%) translateY(16px) scale(0.96);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0) scale(1);
+  }
+}
+
+@keyframes toast-out {
+  0% {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(-50%) translateY(8px) scale(0.96);
+  }
+}
+
+/* ── Modal backdrop blur ────────────────────────────── */
+.modal-backdrop {
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+/* ── Smooth image load ──────────────────────────────── */
+img[loading="lazy"] {
+  opacity: 0;
+  transition: opacity 0.35s ease;
+}
+
+img[loading="lazy"][src]:not([src=""]) {
+  opacity: 1;
+}
+
+/* ── Login gradient background ──────────────────────── */
+.login-bg {
+  background:
+    radial-gradient(ellipse 80% 50% at 50% -20%, rgba(9, 20, 38, 0.08), transparent),
+    radial-gradient(ellipse 60% 40% at 80% 100%, rgba(26, 41, 66, 0.05), transparent),
+    radial-gradient(ellipse 40% 30% at 10% 60%, rgba(106, 98, 88, 0.04), transparent);
+}
+
+.dark .login-bg {
+  background:
+    radial-gradient(ellipse 80% 50% at 50% -20%, rgba(212, 188, 255, 0.04), transparent),
+    radial-gradient(ellipse 60% 40% at 80% 100%, rgba(90, 45, 181, 0.03), transparent);
+}
+
+/* ── Subtle pattern for image stage ─────────────────── */
+.image-stage {
+  background:
+    radial-gradient(circle at 20% 50%, rgba(9, 20, 38, 0.02), transparent 50%),
+    radial-gradient(circle at 80% 50%, rgba(26, 41, 66, 0.02), transparent 50%);
+}
+
+.dark .image-stage {
+  background:
+    radial-gradient(circle at 20% 50%, rgba(212, 188, 255, 0.01), transparent 50%),
+    radial-gradient(circle at 80% 50%, rgba(90, 45, 181, 0.01), transparent 50%);
+}
+
+/* ── Dropzone pulse ─────────────────────────────────── */
+@keyframes dropzone-pulse {
+  0%, 100% {
+    border-color: rgba(9, 20, 38, 0.15);
+  }
+  50% {
+    border-color: rgba(9, 20, 38, 0.3);
+  }
+}
+
+.dark .dropzone-pulse {
+  animation-name: dropzone-pulse-dark;
+}
+
+@keyframes dropzone-pulse-dark {
+  0%, 100% {
+    border-color: rgba(212, 188, 255, 0.15);
+  }
+  50% {
+    border-color: rgba(212, 188, 255, 0.3);
+  }
+}
+
+.dropzone-active {
+  animation: dropzone-pulse 1.5s ease-in-out infinite;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   SKELETON LOADING — Unified shimmer pattern
+   ═══════════════════════════════════════════════════════════ */
+
+@layer components {
+  .skeleton {
+    @apply rounded-xl bg-surface-container-high relative overflow-hidden;
+  }
+
+  .dark .skeleton {
+    @apply bg-dark-surface-container-high;
+  }
+
+  .skeleton::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      rgba(255, 255, 255, 0.06) 40%,
+      rgba(255, 255, 255, 0.12) 50%,
+      rgba(255, 255, 255, 0.06) 60%,
+      transparent 100%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.8s linear infinite;
+  }
+
+  .dark .skeleton::after {
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      rgba(255, 255, 255, 0.02) 40%,
+      rgba(255, 255, 255, 0.05) 50%,
+      rgba(255, 255, 255, 0.02) 60%,
+      transparent 100%
+    );
+    background-size: 200% 100%;
+  }
+
+  .skeleton-text {
+    @apply skeleton h-4 w-3/4;
+  }
+
+  .skeleton-text-sm {
+    @apply skeleton h-3 w-1/2;
+  }
+
+  .skeleton-circle {
+    @apply skeleton rounded-full;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   STAGGER ANIMATION — Apply via data-stagger or utility
+   ═══════════════════════════════════════════════════════════ */
+
+@layer utilities {
+  .stagger-children > * {
+    animation: fade-in-up 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  .stagger-children > *:nth-child(1) { animation-delay: 0ms; }
+  .stagger-children > *:nth-child(2) { animation-delay: 40ms; }
+  .stagger-children > *:nth-child(3) { animation-delay: 80ms; }
+  .stagger-children > *:nth-child(4) { animation-delay: 120ms; }
+  .stagger-children > *:nth-child(5) { animation-delay: 160ms; }
+  .stagger-children > *:nth-child(6) { animation-delay: 200ms; }
+  .stagger-children > *:nth-child(7) { animation-delay: 240ms; }
+  .stagger-children > *:nth-child(8) { animation-delay: 280ms; }
+  .stagger-children > *:nth-child(9) { animation-delay: 320ms; }
+  .stagger-children > *:nth-child(10) { animation-delay: 360ms; }
+  .stagger-children > *:nth-child(n+11) { animation-delay: 400ms; }
+
+  .animate-in {
+    animation: fade-in 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  .animate-in-up {
+    animation: fade-in-up 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  .animate-in-down {
+    animation: fade-in-down 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  .animate-scale-in {
+    animation: scale-in 0.25s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  /* ── Interactive press feedback ─────────────────── */
+  .press-feedback {
+    @apply transition-transform duration-150 ease-out;
+  }
+  .press-feedback:active {
+    transform: scale(0.97);
+  }
+
+  /* ── Smooth height transition (for expand/collapse) ─ */
+  .collapse-transition {
+    overflow: hidden;
+    transition: max-height 0.3s cubic-bezier(0.16, 1, 0.3, 1),
+                opacity 0.2s ease;
+  }
+
+  /* ── Image reveal on load ────────────────────────── */
+  .img-reveal {
+    @apply transition-opacity duration-500 ease-out;
+  }
+
+  /* ── Gradient text helper ────────────────────────── */
+  .text-gradient {
+    background: linear-gradient(135deg, #091426 0%, #6A6258 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .dark .text-gradient {
+    background: linear-gradient(135deg, #E0E0E4 0%, #909098 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   DARK MODE — Additional granular overrides
+   ═══════════════════════════════════════════════════════════ */
+
+.dark .bg-black\/5 {
+  background-color: rgba(255, 255, 255, 0.04);
+}
+
+.dark .ring-midnight-ink\/10 {
+  --tw-ring-color: rgba(224, 224, 228, 0.12);
 }

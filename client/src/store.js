@@ -1,6 +1,5 @@
 const KEYS = {
   collections: "newsweekly_collections",
-  saved: "newsweekly_savedsearches",
   feedback: "newsweekly_feedback",
   prompt: "masterPrompt",
 };
@@ -64,20 +63,6 @@ export const collections = {
   },
   remove(collId) {
     this.save(this.list().filter((c) => c.id !== collId));
-  },
-};
-
-export const savedSearches = {
-  list() {
-    return read(KEYS.saved, []);
-  },
-  add(name, params) {
-    const item = { id: uid(), name, ...params, createdAt: Date.now() };
-    this.save([...this.list(), item]);
-    return item;
-  },
-  remove(id) {
-    this.save(this.list().filter((s) => s.id !== id));
   },
 };
 

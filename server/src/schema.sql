@@ -30,6 +30,9 @@ CREATE INDEX IF NOT EXISTS images_deleted_idx ON images (created_at DESC) WHERE 
 -- covers both the % similarity operator and word_similarity().
 CREATE INDEX IF NOT EXISTS images_tags_trgm_idx ON images USING GIN (tags gin_trgm_ops);
 
+-- Partial index for the "tag all untagged" query (avoids scanning full table).
+CREATE INDEX IF NOT EXISTS images_untagged_idx ON images (object_key) WHERE ai_tagged = false AND deleted = false;
+
 -- ---------------------------------------------------------------------------
 -- AI queue + rate-limit memory
 -- ---------------------------------------------------------------------------
@@ -53,6 +56,8 @@ CREATE TABLE IF NOT EXISTS ai_jobs (
 
 CREATE INDEX IF NOT EXISTS ai_jobs_status_idx ON ai_jobs (status, created_at DESC);
 CREATE INDEX IF NOT EXISTS ai_jobs_object_key_idx ON ai_jobs (object_key);
+CREATE INDEX IF NOT EXISTS ai_jobs_active_idx ON ai_jobs (priority DESC, created_at ASC) WHERE status = 'queued';
+CREATE INDEX IF NOT EXISTS ai_jobs_stuck_idx ON ai_jobs (started_at) WHERE status = 'running';
 
 -- Key/value store for persistent AI system state:
 --   config -> { master_prompt, min_interval_ms, daily_limit }

@@ -92,7 +92,7 @@ test("production boot (Railway parity): no database — stays up, 503 guard + se
     const base = `http://127.0.0.1:${port}`;
     const health = await waitFor(`${base}/api/health`);
     const hb = await health.json();
-    assert.equal(hb.ok, true);
+    assert.equal(hb.ok, false);
     assert.equal(hb.db, false);
 
     const img = await fetch(`${base}/api/images`);

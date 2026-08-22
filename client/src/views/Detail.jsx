@@ -8,9 +8,8 @@ import {
   updateImage,
   deleteImage,
 } from "../api.js";
+import { DEFAULT_PROMPT } from "../constants.js";
 import { pushError } from "../notify.jsx";
-
-const DEFAULT_PROMPT = "Give me 5 descriptive keywords for this image.";
 
 export default function Detail({
   image,
@@ -58,9 +57,7 @@ export default function Detail({
         .then((rows) =>
           setTagCounts(Object.fromEntries(rows.map((r) => [r.tag, r.n]))),
         )
-        .catch(() => {
-          /* counts are decorative */
-        });
+        .catch(() => {});
     }
   }, [image.object_key]);
 
@@ -69,9 +66,7 @@ export default function Detail({
       .then(({ config }) => {
         if (config?.master_prompt) setPrompt(config.master_prompt);
       })
-      .catch(() => {
-        /* AI config is best-effort here */
-      });
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -185,10 +180,9 @@ export default function Detail({
   return (
     <>
       <div className="flex flex-1 overflow-hidden">
-        {/* Main Content Canvas */}
         <main className="flex-1 relative flex flex-col bg-background">
           {/* Floating Top Toolbar */}
-          <div className="absolute top-4 left-1/2 -translate-x-1/2 z-30 flex items-center gap-1 bg-white/90 backdrop-blur-xl border border-black/5 shadow-soft rounded-full px-2 py-1.5 max-w-[calc(100%-32px)]">
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 z-30 floating-bar flex items-center gap-1 px-2 py-1.5 max-w-[calc(100%-32px)] animate-in-down">
             <button
               onClick={onBack}
               className="flex items-center gap-1.5 pl-2 pr-3 py-1.5 rounded-full text-on-surface-variant hover:bg-surface-container-low hover:text-midnight-ink transition-colors"
@@ -201,11 +195,11 @@ export default function Detail({
               </span>
               <span className="font-label-caps text-label-caps">Back</span>
             </button>
-            <div className="w-px h-4 bg-black/10"></div>
-            <span className="font-mono-data text-mono-data text-on-surface-variant truncate max-w-[180px] px-2">
+            <div className="w-px h-4 bg-black/10 dark:bg-white/[0.08]"></div>
+            <span className="font-mono-data text-mono-data text-on-surface-variant truncate max-w-[180px] px-2 text-xs">
               {image.original_filename}
             </span>
-            <div className="w-px h-4 bg-black/10"></div>
+            <div className="w-px h-4 bg-black/10 dark:bg-white/[0.08]"></div>
             <div className="flex items-center gap-0.5">
               <button
                 onClick={() => onNavigate(-1)}
@@ -215,7 +209,7 @@ export default function Detail({
               >
                 <span className="material-symbols-outlined">chevron_left</span>
               </button>
-              <span className="font-mono-data text-mono-data text-on-surface-variant px-1">
+              <span className="font-mono-data text-mono-data text-on-surface-variant px-1 text-xs">
                 {index + 1} / {total}
               </span>
               <button
@@ -230,7 +224,7 @@ export default function Detail({
           </div>
 
           {/* Image Stage */}
-          <div className="flex-1 p-margin-page pt-20 flex items-center justify-center bg-surface-container overflow-hidden">
+          <div className="flex-1 p-margin-page pt-20 flex items-center justify-center bg-surface-container dark:bg-dark-surface-container-low image-stage overflow-hidden">
             <div className="relative w-full h-full">
               <div
                 className="w-full h-full overflow-auto flex items-center justify-center cursor-grab"
@@ -245,7 +239,7 @@ export default function Detail({
                 title={zoom === 1 ? "Click to zoom in" : "Click to zoom out"}
               >
                 <div
-                  className="flex items-center justify-center transition-all duration-200"
+                  className="flex items-center justify-center transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]"
                   style={{
                     width: zoom === 1 ? "100%" : `${zoom * 100}%`,
                     height: zoom === 1 ? "100%" : `${zoom * 100}%`,
@@ -253,19 +247,19 @@ export default function Detail({
                 >
                   <img
                     alt="Current Asset"
-                    className="max-w-full max-h-full object-contain rounded-3xl shadow-soft border border-black/5 bg-white"
+                    className="max-w-full max-h-full object-contain rounded-3xl shadow-soft dark:shadow-dark-soft border border-black/5 dark:border-dark-outline-variant bg-white dark:bg-dark-surface-container-high transition-shadow duration-300"
                     src={src}
                   />
                 </div>
               </div>
               {/* Zoom Controls */}
-              <div className="absolute bottom-4 right-4 flex bg-white/90 backdrop-blur border border-black/5 rounded-full shadow-soft">
+              <div className="absolute bottom-4 right-4 floating-bar flex items-center px-1 py-1 animate-in-up" style={{ animationDelay: "200ms" }}>
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
                     setZoom((z) => Math.max(1, +(z - 0.5).toFixed(2)));
                   }}
-                  className="w-9 h-9 flex items-center justify-center rounded-full text-on-surface-variant hover:bg-surface-container-low hover:text-midnight-ink transition-colors"
+                  className="w-9 h-9 flex items-center justify-center rounded-full text-on-surface-variant dark:text-dark-on-surface-variant hover:bg-surface-container-low dark:hover:bg-dark-surface-container-highest hover:text-midnight-ink dark:hover:text-dark-primary transition-all duration-200 active:scale-90"
                   title="Zoom out"
                 >
                   <span
@@ -280,10 +274,10 @@ export default function Detail({
                     e.stopPropagation();
                     setZoom(1);
                   }}
-                  className="flex items-center justify-center rounded-full text-on-surface-variant hover:bg-surface-container-low hover:text-midnight-ink transition-colors px-2"
+                  className="flex items-center justify-center rounded-full text-on-surface-variant dark:text-dark-on-surface-variant hover:bg-surface-container-low dark:hover:bg-dark-surface-container-highest hover:text-midnight-ink dark:hover:text-dark-primary transition-all duration-200 px-2 active:scale-90"
                   title="Reset zoom"
                 >
-                  <span className="font-mono-data text-mono-data">
+                  <span className="font-mono-data text-mono-data text-xs">
                     {zoom === 1 ? "Fit" : `${Math.round(zoom * 100)}%`}
                   </span>
                 </button>
@@ -292,7 +286,7 @@ export default function Detail({
                     e.stopPropagation();
                     setZoom((z) => Math.min(3, +(z + 0.5).toFixed(2)));
                   }}
-                  className="w-9 h-9 flex items-center justify-center rounded-full text-on-surface-variant hover:bg-surface-container-low hover:text-midnight-ink transition-colors"
+                  className="w-9 h-9 flex items-center justify-center rounded-full text-on-surface-variant dark:text-dark-on-surface-variant hover:bg-surface-container-low dark:hover:bg-dark-surface-container-highest hover:text-midnight-ink dark:hover:text-dark-primary transition-all duration-200 active:scale-90"
                   title="Zoom in"
                 >
                   <span
@@ -307,13 +301,13 @@ export default function Detail({
           </div>
 
           {/* Floating Quick Action Bar */}
-          <div className="absolute bottom-5 left-1/2 -translate-x-1/2 z-30 flex items-center gap-0.5 bg-white/90 backdrop-blur-xl border border-black/5 shadow-soft rounded-full px-2 py-1.5">
+          <div className="absolute bottom-5 left-1/2 -translate-x-1/2 z-30 floating-bar flex items-center gap-0.5 px-2 py-1.5 animate-in-up" style={{ animationDelay: "150ms" }}>
             <button
               onClick={() => onFavorite(image)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full transition-colors ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full transition-colors duration-200 ${
                 image.favorite
-                  ? "text-midnight-ink"
-                  : "text-on-surface-variant hover:bg-surface-container-low hover:text-midnight-ink"
+                  ? "text-midnight-ink dark:text-dark-primary"
+                  : "text-on-surface-variant dark:text-dark-on-surface-variant hover:bg-surface-container-low dark:hover:bg-dark-surface-container-highest hover:text-midnight-ink dark:hover:text-dark-primary"
               }`}
               title={
                 image.favorite ? "Remove from favorites" : "Add to favorites"
@@ -334,10 +328,10 @@ export default function Detail({
                 {image.favorite ? "Favorited" : "Favorite"}
               </span>
             </button>
-            <div className="w-px h-4 bg-black/10"></div>
+            <div className="w-px h-4 bg-black/10 dark:bg-white/[0.08]"></div>
             <button
               onClick={() => image.url && window.open(image.url, "_blank")}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-on-surface-variant hover:bg-surface-container-low hover:text-midnight-ink transition-colors"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-on-surface-variant dark:text-dark-on-surface-variant hover:bg-surface-container-low dark:hover:bg-dark-surface-container-highest hover:text-midnight-ink dark:hover:text-dark-primary transition-colors"
             >
               <span
                 className="material-symbols-outlined"
@@ -347,10 +341,10 @@ export default function Detail({
               </span>
               <span className="font-label-caps text-label-caps">Download</span>
             </button>
-            <div className="w-px h-4 bg-black/10"></div>
+            <div className="w-px h-4 bg-black/10 dark:bg-white/[0.08]"></div>
             <button
               onClick={handleDelete}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-on-surface-variant hover:bg-error-container hover:text-on-error-container transition-colors"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-on-surface-variant dark:text-dark-on-surface-variant hover:bg-error-container hover:text-on-error-container transition-colors"
             >
               <span
                 className="material-symbols-outlined"
@@ -366,7 +360,7 @@ export default function Detail({
         {/* Metadata & Tagging Panel */}
         <aside className="w-panel-width-fixed bg-transparent flex flex-col overflow-y-auto p-4 gap-4">
           {/* Tags Card */}
-          <section className="bg-white rounded-3xl shadow-soft border border-black/5 p-4 flex flex-col gap-3">
+          <section className="bg-white dark:bg-dark-surface-container-high rounded-2xl shadow-soft dark:shadow-dark-soft border border-black/5 dark:border-dark-outline-variant p-4 flex flex-col gap-3 transition-colors duration-300">
             <div className="flex items-center justify-between">
               <label className="font-label-caps text-label-caps text-on-surface-variant uppercase">
                 Tags
@@ -377,7 +371,7 @@ export default function Detail({
                   onContextMenu={openPromptModal}
                   disabled={tagging}
                   title="Left-click: AI-tag this image. Right-click: edit master prompt."
-                  className="flex items-center gap-1 px-3 py-1.5 rounded-full bg-midnight-ink text-white font-label-caps text-label-caps hover:bg-prussian-navy transition-colors disabled:opacity-60"
+                  className="flex items-center gap-1 px-3 py-1.5 rounded-full bg-midnight-ink text-white font-label-caps text-label-caps hover:bg-prussian-navy transition-all duration-200 disabled:opacity-60 active:scale-95"
                 >
                   <span
                     className="material-symbols-outlined"
@@ -393,12 +387,12 @@ export default function Detail({
               </div>
             </div>
             {tagError && (
-              <p className="font-body-sm text-body-sm text-error bg-error/10 border border-error/30 rounded-xl px-3 py-2">
+              <p className="font-body-sm text-body-sm text-error bg-error/10 border border-error/30 rounded-xl px-3 py-2 animate-fade-in">
                 {tagError}
               </p>
             )}
             {tagNotice && (
-              <p className="font-body-sm text-body-sm text-midnight-ink bg-surface-container-low rounded-xl px-3 py-2">
+              <p className="font-body-sm text-body-sm text-midnight-ink bg-surface-container-low rounded-xl px-3 py-2 animate-fade-in">
                 {tagNotice}
               </p>
             )}
@@ -407,7 +401,7 @@ export default function Detail({
               {tags.map((tag) => (
                 <span
                   key={tag}
-                  className="inline-flex items-center gap-1.5 bg-surface-container-low border border-black/5 text-on-surface font-body-sm text-body-sm px-2.5 py-1 rounded-full"
+                  className="tag-chip"
                 >
                   <button
                     onClick={() => navigate(`/?q=${encodeURIComponent(tag)}`)}
@@ -442,7 +436,7 @@ export default function Detail({
               <input
                 value={newTag}
                 onChange={(e) => setNewTag(e.target.value)}
-                className="w-full bg-surface-container-low border border-black/5 rounded-xl px-3 py-2 text-body-sm text-on-surface focus:border-midnight-ink focus:ring-1 focus:ring-midnight-ink outline-none transition-colors"
+                className="input-base w-full text-body-sm pr-8"
                 placeholder={saving ? "Saving..." : "Add tags..."}
                 type="text"
               />
@@ -462,7 +456,7 @@ export default function Detail({
           </section>
 
           {/* File Details Card */}
-          <section className="bg-white rounded-3xl shadow-soft border border-black/5 p-4 flex flex-col gap-4">
+          <section className="bg-white dark:bg-dark-surface-container-high rounded-2xl shadow-soft dark:shadow-dark-soft border border-black/5 dark:border-dark-outline-variant p-4 flex flex-col gap-4 transition-colors duration-300">
             <h3 className="font-label-caps text-label-caps text-on-surface-variant uppercase">
               File Details
             </h3>
@@ -470,8 +464,8 @@ export default function Detail({
               <label className="font-label-caps text-label-caps text-on-surface-variant">
                 Original Filename
               </label>
-              <div className="flex items-center justify-between gap-2">
-                <span className="font-mono-data text-mono-data text-on-surface truncate">
+              <div className="bg-surface-container-low dark:bg-dark-surface-container-highest rounded-xl px-3 py-2 border border-black/5 dark:border-dark-outline-variant">
+                <span className="font-mono-data text-mono-data text-on-surface dark:text-dark-on-surface truncate text-sm block">
                   {image.original_filename}
                 </span>
               </div>
@@ -480,7 +474,7 @@ export default function Detail({
               <label className="font-label-caps text-label-caps text-on-surface-variant">
                 Date added
               </label>
-              <span className="font-mono-data text-mono-data text-on-surface">
+              <span className="font-mono-data text-mono-data text-on-surface text-sm">
                 {image.created_at || "—"}
               </span>
             </div>
@@ -491,12 +485,15 @@ export default function Detail({
       {/* Master Prompt Modal */}
       {promptModal && (
         <div
-          className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4"
+          className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4 modal-backdrop"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Master AI tagging prompt"
           onMouseDown={(e) => {
             if (e.target === e.currentTarget) setPromptModal(false);
           }}
         >
-          <div className="w-full max-w-md bg-white rounded-[2rem] shadow-soft border border-black/5 p-6">
+          <div className="w-full max-w-md bg-white dark:bg-dark-surface-container-high rounded-[2rem] shadow-soft-lg dark:shadow-dark-soft-lg border border-black/5 dark:border-dark-outline-variant p-6 animate-fade-in-up">
             <h3 className="text-lg font-bold text-midnight-ink tracking-tight mb-1">
               Master AI Tagging Prompt
             </h3>
@@ -508,19 +505,19 @@ export default function Detail({
               value={draftPrompt}
               onChange={(e) => setDraftPrompt(e.target.value)}
               rows={4}
-              className="w-full bg-surface-container-low border border-black/5 rounded-xl px-3 py-2 text-body-sm text-on-surface focus:border-midnight-ink focus:ring-1 focus:ring-midnight-ink outline-none transition-colors resize-y"
+              className="input-base w-full resize-y"
               placeholder="e.g. extract exact text and objects"
             />
             <div className="flex justify-end gap-2 mt-4">
               <button
                 onClick={() => setPromptModal(false)}
-                className="px-4 py-2 rounded-full font-label-caps text-label-caps text-on-surface-variant border border-black/5 hover:bg-surface-container-low transition-colors"
+                className="btn-pill-secondary px-4 py-2"
               >
                 Cancel
               </button>
               <button
                 onClick={savePrompt}
-                className="px-4 py-2 rounded-full font-label-caps text-label-caps bg-midnight-ink text-white hover:bg-prussian-navy transition-colors"
+                className="btn-pill-primary px-4 py-2"
               >
                 Save Prompt
               </button>

@@ -18,6 +18,10 @@ export const r2 = new S3Client({
     secretAccessKey: (process.env.R2_SECRET_ACCESS_KEY || "").trim(),
   },
   forcePathStyle: true,
+  maxAttempts: 3,
+  requestHandler: {
+    requestTimeout: 30_000,
+  },
 });
 
 export const R2_BUCKET = process.env.R2_BUCKET_NAME;

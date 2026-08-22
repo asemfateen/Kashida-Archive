@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import {
   BrowserRouter,
   Navigate,
@@ -28,6 +28,69 @@ import {
 } from "./api.js";
 import { ErrorToaster, pushError } from "./notify.jsx";
 
+/* ═══════════════════════════════════════════════════════════
+   Dark Mode Context
+   ═══════════════════════════════════════════════════════════ */
+
+const DarkModeContext = createContext({ isDark: false, toggle: () => {} });
+
+function DarkModeProvider({ children }) {
+  const [isDark, setIsDark] = useState(() => {
+    try {
+      const stored = localStorage.getItem("kashida_theme");
+      if (stored === "dark") return true;
+      if (stored === "light") return false;
+    } catch {}
+    return window.matchMedia?.("(prefers-color-scheme: dark)").matches ?? false;
+  });
+
+  useEffect(() => {
+    const root = document.documentElement;
+    if (isDark) {
+      root.classList.add("dark");
+      root.classList.remove("light");
+    } else {
+      root.classList.add("light");
+      root.classList.remove("dark");
+    }
+    try {
+      localStorage.setItem("kashida_theme", isDark ? "dark" : "light");
+    } catch {}
+  }, [isDark]);
+
+  // Listen for system preference changes
+  useEffect(() => {
+    const mq = window.matchMedia("(prefers-color-scheme: dark)");
+    const handler = (e) => {
+      try {
+        if (!localStorage.getItem("kashida_theme")) {
+          setIsDark(e.matches);
+        }
+      } catch {
+        setIsDark(e.matches);
+      }
+    };
+    mq.addEventListener?.("change", handler);
+    return () => mq.removeEventListener?.("change", handler);
+  }, []);
+
+  const toggle = useCallback(() => setIsDark((v) => !v), []);
+
+  return (
+    <DarkModeContext.Provider value={{ isDark, toggle }}>
+      {children}
+    </DarkModeContext.Provider>
+  );
+}
+
+export function useDarkMode() {
+  return useContext(DarkModeContext);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   Cache Helpers
+   ═══════════════════════════════════════════════════════════ */
+
 const CACHE_PREFIX = "kashida_cache_";
 const cacheKey = (view) => `${CACHE_PREFIX}${view}`;
 
@@ -42,9 +105,7 @@ function readCache(view) {
 function writeCache(view, data) {
   try {
     sessionStorage.setItem(cacheKey(view), JSON.stringify(data));
-  } catch {
-    // Storage full or unavailable — cache is best-effort.
-  }
+  } catch {}
 }
 
 function dropFromCache(objectKey) {
@@ -59,9 +120,7 @@ function dropFromCache(objectKey) {
             val.filter((x) => x.object_key !== objectKey),
           );
         }
-      } catch {
-        // Ignore malformed entries.
-      }
+      } catch {}
     }
   }
 }
@@ -74,6 +133,10 @@ function clearCaches() {
   }
   for (const key of keys) sessionStorage.removeItem(key);
 }
+
+/* ═══════════════════════════════════════════════════════════
+   View Routing
+   ═══════════════════════════════════════════════════════════ */
 
 const VIEWS = ["dashboard", "upload", "detail", "search", "settings", "ai"];
 
@@ -105,6 +168,10 @@ function detailKeyFromPath(pathname) {
   }
 }
 
+/* ═══════════════════════════════════════════════════════════
+   Auth Guard
+   ═══════════════════════════════════════════════════════════ */
+
 function Guard({ children }) {
   const { isAuthed } = useAuth();
   const location = useLocation();
@@ -112,6 +179,10 @@ function Guard({ children }) {
     return <Navigate to="/login" replace state={{ from: location }} />;
   return children;
 }
+
+/* ═══════════════════════════════════════════════════════════
+   Main Shell
+   ═══════════════════════════════════════════════════════════ */
 
 function Shell() {
   const navigate = useNavigate();
@@ -157,8 +228,6 @@ function Shell() {
   );
 
   useEffect(() => {
-    // Hydrate instantly from the session cache, then refresh in the
-    // background so returning to the library never shows a spinner.
     const cached = readCache(filter);
     if (cached) {
       setImages(cached);
@@ -323,109 +392,126 @@ function Shell() {
   };
 
   return (
-    <div className="h-screen w-screen flex flex-col overflow-hidden bg-surface-container text-on-surface font-body-md text-body-md">
+    <Layout
+      searchQuery={searchQuery}
+      onSearch={openSearch}
+      onSettings={() => go(VIEW_PATH.settings)}
+      onUpload={() => go(VIEW_PATH.upload)}
+      sidePanelProps={{
+        activeKey:
+          view === "upload"
+            ? "upload"
+            : view === "ai"
+              ? "ai"
+              : view === "dashboard"
+                ? filter
+                : null,
+        onNavigate: handleNav,
+        onSettings: () => go(VIEW_PATH.settings),
+      }}
+    >
+      {view === "dashboard" && (
+        <Dashboard
+          images={images}
+          loading={loading}
+          loadError={loadError}
+          onRetry={() => loadImages(filter)}
+          activeFilter={filter}
+          searchQuery={searchQuery}
+          onFilter={setFilter}
+          onOpenImage={openImage}
+          onOpenList={openList}
+          onUpload={() => go(VIEW_PATH.upload)}
+          onFavorite={async (image) => {
+            const row = await toggleFavorite(image);
+            if (filter === "favorites" && !row.favorite) {
+              removeFromList(row.object_key);
+            }
+            return row;
+          }}
+          onRestore={(objectKey) =>
+            updateImage(objectKey, { deleted: false })
+              .then((row) => {
+                patchImage(objectKey, row);
+                removeFromList(objectKey);
+                dropFromCache(objectKey);
+              })
+              .catch((err) => {
+                pushError(err?.message || "Restore failed");
+              })
+          }
+          onDeleteForever={deleteForever}
+          onEmptyTrash={emptyTrashList}
+          onChanged={() => {
+            clearCaches();
+            loadImages(filter);
+          }}
+        />
+      )}
+      {view === "upload" && (
+        <Upload onUploaded={() => loadImages("all")} />
+      )}
+      {view === "detail" && selected && (
+        <Detail
+          image={selected}
+          index={selectedIndex}
+          total={(detailList || images).length}
+          onBack={() => go(detailFrom)}
+          onNavigate={stepImage}
+          onUpdated={(row) => patchImage(row.object_key, row)}
+          onDeleted={() => {
+            removeFromList(selected.object_key);
+            go(detailFrom);
+          }}
+          onFavorite={async (image) => {
+            try {
+              const row = await toggleFavorite(image);
+              if (filter === "favorites" && image.favorite) {
+                removeFromList(row.object_key);
+                go(detailFrom);
+              }
+            } catch (err) {
+              pushError(err?.message || "Favorite update failed");
+            }
+          }}
+        />
+      )}
+      {view === "search" && (
+        <Search
+          query={searchQuery}
+          onOpenImage={openImage}
+          onOpenList={openList}
+          onUpload={() => go(VIEW_PATH.upload)}
+          onBack={() => goBack()}
+          onSettings={() => go(VIEW_PATH.settings)}
+        />
+      )}
+      {view === "settings" && (
+        <Settings imageCount={images.length} onBack={() => goBack()} />
+      )}
+      {view === "ai" && <Ai />}
+    </Layout>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════
+   Layout — shared shell chrome (Taskbar + SidePanel + content card)
+   ═══════════════════════════════════════════════════════════ */
+
+function Layout({ children, searchQuery, onSearch, onSettings, onUpload, sidePanelProps }) {
+  return (
+    <div className="h-screen w-screen flex flex-col overflow-hidden bg-surface-container text-on-surface font-body-md text-body-md transition-colors duration-300">
       <Taskbar
-        onSearch={openSearch}
-        onSettings={() => go(VIEW_PATH.settings)}
-        onUpload={() => go(VIEW_PATH.upload)}
+        onSearch={onSearch}
+        onSettings={onSettings}
+        onUpload={onUpload}
         searchQuery={searchQuery}
       />
       <div className="flex-1 flex flex-col overflow-hidden px-4 pb-4">
         <div className="flex flex-1 overflow-hidden gap-3">
-          <SidePanel
-            activeKey={
-              view === "upload"
-                ? "upload"
-                : view === "ai"
-                  ? "ai"
-                  : view === "dashboard"
-                    ? filter
-                    : null
-            }
-            onNavigate={handleNav}
-            onSettings={() => go(VIEW_PATH.settings)}
-          />
-          <div className="flex-1 flex flex-col overflow-hidden bg-white rounded-[2rem] shadow-soft border border-black/5">
-            {view === "dashboard" && (
-              <Dashboard
-                images={images}
-                loading={loading}
-                loadError={loadError}
-                onRetry={() => loadImages(filter)}
-                activeFilter={filter}
-                searchQuery={searchQuery}
-                onFilter={setFilter}
-                onOpenImage={openImage}
-                onOpenList={openList}
-                onUpload={() => go(VIEW_PATH.upload)}
-                onFavorite={async (image) => {
-                  const row = await toggleFavorite(image);
-                  if (filter === "favorites" && !row.favorite) {
-                    removeFromList(row.object_key);
-                  }
-                  return row;
-                }}
-                onRestore={(objectKey) =>
-                  updateImage(objectKey, { deleted: false })
-                    .then((row) => {
-                      patchImage(objectKey, row);
-                      removeFromList(objectKey);
-                      dropFromCache(objectKey);
-                    })
-                    .catch((err) => {
-                      pushError(err?.message || "Restore failed");
-                    })
-                }
-                onDeleteForever={deleteForever}
-                onEmptyTrash={emptyTrashList}
-                onChanged={() => {
-                  clearCaches();
-                  loadImages(filter);
-                }}
-              />
-            )}
-            {view === "upload" && (
-              <Upload onUploaded={() => loadImages("all")} />
-            )}
-            {view === "detail" && selected && (
-              <Detail
-                image={selected}
-                index={selectedIndex}
-                total={(detailList || images).length}
-                onBack={() => go(detailFrom)}
-                onNavigate={stepImage}
-                onUpdated={(row) => patchImage(row.object_key, row)}
-                onDeleted={() => {
-                  removeFromList(selected.object_key);
-                  go(detailFrom);
-                }}
-                onFavorite={async (image) => {
-                  try {
-                    const row = await toggleFavorite(image);
-                    if (filter === "favorites" && image.favorite) {
-                      removeFromList(row.object_key);
-                      go(detailFrom);
-                    }
-                  } catch (err) {
-                    pushError(err?.message || "Favorite update failed");
-                  }
-                }}
-              />
-            )}
-            {view === "search" && (
-              <Search
-                query={searchQuery}
-                onOpenImage={openImage}
-                onOpenList={openList}
-                onUpload={() => go(VIEW_PATH.upload)}
-                onBack={() => goBack()}
-                onSettings={() => go(VIEW_PATH.settings)}
-              />
-            )}
-            {view === "settings" && (
-              <Settings imageCount={images.length} onBack={() => goBack()} />
-            )}
-            {view === "ai" && <Ai />}
+          <SidePanel {...sidePanelProps} />
+          <div className="flex-1 flex flex-col overflow-hidden bg-white dark:bg-dark-surface rounded-[2rem] shadow-soft dark:shadow-dark-soft border border-black/5 dark:border-dark-outline-variant transition-colors duration-300">
+            {children}
           </div>
         </div>
       </div>
@@ -434,30 +520,36 @@ function Shell() {
   );
 }
 
+/* ═══════════════════════════════════════════════════════════
+   Shell — main authenticated layout with routing
+   ═══════════════════════════════════════════════════════════ */
+
 export default function App() {
   return (
     <BrowserRouter>
-      <AuthProvider>
-        <Routes>
-          <Route path="/login" element={<Login />} />
-          <Route
-            path="/profile"
-            element={
-              <Guard>
-                <ProfileShell />
-              </Guard>
-            }
-          />
-          <Route
-            path="/*"
-            element={
-              <Guard>
-                <Shell />
-              </Guard>
-            }
-          />
-        </Routes>
-      </AuthProvider>
+      <DarkModeProvider>
+        <AuthProvider>
+          <Routes>
+            <Route path="/login" element={<Login />} />
+            <Route
+              path="/profile"
+              element={
+                <Guard>
+                  <ProfileShell />
+                </Guard>
+              }
+            />
+            <Route
+              path="/*"
+              element={
+                <Guard>
+                  <Shell />
+                </Guard>
+              }
+            />
+          </Routes>
+        </AuthProvider>
+      </DarkModeProvider>
     </BrowserRouter>
   );
 }
@@ -468,34 +560,25 @@ function ProfileShell() {
   const [searchParams] = useSearchParams();
   const searchQuery = searchParams.get("q") || "";
   return (
-    <div className="h-screen w-screen flex flex-col overflow-hidden bg-surface-container text-on-surface font-body-md text-body-md">
-      <Taskbar
-        onSearch={(q) => {
-          if (q) navigate(`/?q=${encodeURIComponent(q)}`, { replace: true });
-          else navigate("/", { replace: true });
-        }}
-        onSettings={() => go("/settings")}
-        onUpload={() => go("/upload")}
-        searchQuery={searchQuery}
-      />
-      <div className="flex-1 flex flex-col overflow-hidden px-4 pb-4">
-        <div className="flex flex-1 overflow-hidden gap-3">
-          <SidePanel
-            activeKey={null}
-            onNavigate={(key) => {
-              if (key === "upload") go("/upload");
-              else if (key === "ai") go("/ai");
-              else go("/");
-            }}
-            onSettings={() => go("/settings")}
-          />
-          <div className="flex-1 flex flex-col overflow-hidden bg-white rounded-[2rem] shadow-soft border border-black/5">
-            <Profile />
-          </div>
-        </div>
-      </div>
-    </div>
+    <Layout
+      searchQuery={searchQuery}
+      onSearch={(q) => {
+        if (q) navigate(`/?q=${encodeURIComponent(q)}`, { replace: true });
+        else navigate("/", { replace: true });
+      }}
+      onSettings={() => go("/settings")}
+      onUpload={() => go("/upload")}
+      sidePanelProps={{
+        activeKey: null,
+        onNavigate: (key) => {
+          if (key === "upload") go("/upload");
+          else if (key === "ai") go("/ai");
+          else go("/");
+        },
+        onSettings: () => go("/settings"),
+      }}
+    >
+      <Profile />
+    </Layout>
   );
 }
-
-export { VIEWS };

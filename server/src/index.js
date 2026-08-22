@@ -9,6 +9,7 @@ import {
   PutObjectCommand,
   GetObjectCommand,
   DeleteObjectCommand,
+  DeleteObjectsCommand,
 } from "@aws-sdk/client-s3";
 import sharp from "sharp";
 import { r2, R2_BUCKET, isR2Configured } from "./r2.js";
@@ -40,6 +41,46 @@ const PORT = process.env.PORT || 3000;
 const isProduction = process.env.NODE_ENV === "production";
 let dbReady = false;
 
+/* ═══════════════════════════════════════════════════════════
+   Request ID + Timing Middleware
+   ═══════════════════════════════════════════════════════════ */
+
+app.use((req, res, next) => {
+  req.id = req.headers["x-request-id"] || randomUUID();
+  res.setHeader("X-Request-Id", req.id);
+  req._startAt = process.hrtime.bigint();
+  const originalEnd = res.end;
+  res.end = function (...args) {
+    const ns = Number(process.hrtime.bigint() - req._startAt);
+    const ms = (ns / 1e6).toFixed(1);
+    if (req.path !== "/api/health") {
+      const level = res.statusCode >= 500 ? "error" : res.statusCode >= 400 ? "warn" : "info";
+      const msg = `${req.method} ${req.originalUrl} ${res.statusCode} ${ms}ms`;
+      if (level === "error") console.error(`[req] ${req.id} ${msg}`);
+      else if (level === "warn") console.warn(`[req] ${req.id} ${msg}`);
+      else console.log(`[req] ${req.id} ${msg}`);
+    }
+    originalEnd.apply(res, args);
+  };
+  next();
+});
+
+/* ═══════════════════════════════════════════════════════════
+   Security Headers
+   ═══════════════════════════════════════════════════════════ */
+
+app.use((_req, res, next) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "DENY");
+  res.setHeader("X-XSS-Protection", "1; mode=block");
+  res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+  res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+  if (isProduction) {
+    res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+  }
+  next();
+});
+
 // Initialize database asynchronously with error handling.
 // App starts immediately even if DB init fails, allowing graceful degradation,
 // and keeps retrying in the background so a transiently-unreachable DB at boot
@@ -62,7 +103,11 @@ async function ensureDb() {
 // does not 503 while init is still racing to finish.
 const dbInit = ensureDb();
 
-app.use(cors());
+app.use(cors({
+  origin: process.env.ALLOWED_ORIGINS
+    ? process.env.ALLOWED_ORIGINS.split(",").map((o) => o.trim())
+    : "*",
+}));
 app.use(express.json({ limit: "15mb" }));
 
 // Minimal in-memory rate limiter for cost-bearing endpoints (no external deps).
@@ -97,11 +142,16 @@ const RATE_LOGIN = makeRateLimit({ windowMs: 60_000, max: 10 });
 const RATE_UPLOAD = makeRateLimit({ windowMs: 60_000, max: 600 });
 const RATE_TAG = makeRateLimit({ windowMs: 60_000, max: 60 });
 const RATE_AI_JOBS = makeRateLimit({ windowMs: 60_000, max: 300 });
+const RATE_BATCH = makeRateLimit({ windowMs: 60_000, max: 30 });
+const RATE_BULK_DELETE = makeRateLimit({ windowMs: 60_000, max: 10 });
 // Tests reset these between cases to avoid cross-test leaks.
-export { RATE_LOGIN, RATE_UPLOAD, RATE_TAG, RATE_AI_JOBS };
+export { RATE_LOGIN, RATE_UPLOAD, RATE_TAG, RATE_AI_JOBS, RATE_BATCH, RATE_BULK_DELETE };
 app.get("/api/health", async (req, res) => {
   await dbInit;
-  res.json({ ok: true, service: "kashida-archive", db: dbReady });
+  if (!dbReady) {
+    return res.status(503).json({ ok: false, service: "kashida-archive", db: false });
+  }
+  res.json({ ok: true, service: "kashida-archive", db: true });
 });
 
 app.post("/api/auth/login", RATE_LOGIN, async (req, res) => {
@@ -191,7 +241,7 @@ app.post("/api/upload-url", RATE_UPLOAD, async (req, res) => {
   }
 });
 
-app.post("/api/images", async (req, res) => {
+app.post("/api/images", RATE_TAG, async (req, res) => {
   const { objectKey, originalFilename } = req.body || {};
   const invalidKey =
     typeof objectKey !== "string" ||
@@ -314,7 +364,10 @@ app.get("/api/images/serve/*", async (req, res) => {
     // cache aggressively so re-visiting the library does not re-stream every
     // image from R2 through this server.
     res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
-    response.Body.pipe(res);
+    response.Body.on("error", (err) => {
+      console.error("Stream error (serve):", err.message);
+      if (!res.headersSent) res.status(404).send("Not Found");
+    }).pipe(res);
   } catch (err) {
     console.error("Serve image failed:", err.message);
     res.status(404).send("Not Found");
@@ -346,7 +399,11 @@ app.get("/api/images/thumb/*", async (req, res) => {
     );
     res.setHeader("Content-Type", "image/webp");
     res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
-    return cached.Body.pipe(res);
+    cached.Body.on("error", (err) => {
+      console.error("Stream error (thumb cached):", err.message);
+      if (!res.headersSent) res.status(404).send("Not Found");
+    }).pipe(res);
+    return;
   } catch {
     // Thumbnail not generated yet — fall through and build it.
   }
@@ -368,8 +425,16 @@ app.get("/api/images/thumb/*", async (req, res) => {
         new GetObjectCommand({ Bucket: R2_BUCKET, Key: objectKey }),
       );
       if (!full.Body) throw new Error("empty body");
+      const MAX_THUMB_BYTES = 50 * 1024 * 1024;
+      let totalBytes = 0;
       const chunks = [];
-      for await (const chunk of full.Body) chunks.push(chunk);
+      for await (const chunk of full.Body) {
+        totalBytes += chunk.length;
+        if (totalBytes > MAX_THUMB_BYTES) {
+          return res.status(413).json({ error: "source image too large for thumbnail generation" });
+        }
+        chunks.push(chunk);
+      }
       const thumb = await sharp(Buffer.concat(chunks))
         .rotate()
         .resize(THUMB_WIDTH, THUMB_WIDTH, {
@@ -422,7 +487,7 @@ function validateKeyList(value) {
 
 // Batch update for multi-select actions (trash/restore/favorite). Mirrors the
 // single-image PATCH but over an object_key set.
-app.post("/api/images/batch", async (req, res) => {
+app.post("/api/images/batch", RATE_BATCH, async (req, res) => {
   const { objectKeys, patch } = req.body || {};
   if (!validateKeyList(objectKeys)) {
     return res
@@ -468,7 +533,7 @@ app.post("/api/images/batch", async (req, res) => {
 // Row locks serialize against the AI queue's concurrent writes so the merge
 // never clobbers tags the queue just saved, and one request replaces N
 // per-image PATCH round trips from the client.
-app.post("/api/images/batch-tag", async (req, res) => {
+app.post("/api/images/batch-tag", RATE_TAG, async (req, res) => {
   const { objectKeys, tags } = req.body || {};
   if (!validateKeyList(objectKeys)) {
     return res
@@ -512,7 +577,7 @@ app.post("/api/images/batch-tag", async (req, res) => {
 
 // Hard-delete a set of images (from trash): removes DB rows and their R2
 // objects. R2 cleanup is best-effort so a partial failure never strands rows.
-app.post("/api/images/batch-delete", async (req, res) => {
+app.post("/api/images/batch-delete", RATE_BULK_DELETE, async (req, res) => {
   const { objectKeys } = req.body || {};
   if (!validateKeyList(objectKeys)) {
     return res
@@ -524,18 +589,19 @@ app.post("/api/images/batch-delete", async (req, res) => {
       `DELETE FROM images WHERE object_key = ANY($1) RETURNING object_key`,
       [objectKeys],
     );
-    if (isR2Configured()) {
-      for (const row of rows) {
+    if (isR2Configured() && rows.length > 0) {
+      const BATCH_SIZE = 1000;
+      for (let i = 0; i < rows.length; i += BATCH_SIZE) {
+        const batch = rows.slice(i, i + BATCH_SIZE);
         try {
           await r2.send(
-            new DeleteObjectCommand({ Bucket: R2_BUCKET, Key: row.object_key }),
+            new DeleteObjectsCommand({
+              Bucket: R2_BUCKET,
+              Delete: { Objects: batch.map((r) => ({ Key: r.object_key })) },
+            }),
           );
         } catch (r2Err) {
-          console.error(
-            "R2 object delete failed:",
-            row.object_key,
-            r2Err.message,
-          );
+          console.error("R2 batch delete failed:", r2Err.message);
         }
       }
     }
@@ -667,23 +733,24 @@ app.delete("/api/images/:objectKey", async (req, res) => {
   }
 });
 
-app.delete("/api/trash", async (req, res) => {
+app.delete("/api/trash", RATE_BULK_DELETE, async (req, res) => {
   try {
     const { rows } = await pool.query(
       `DELETE FROM images WHERE deleted = true RETURNING object_key`,
     );
-    if (isR2Configured()) {
-      for (const row of rows) {
+    if (isR2Configured() && rows.length > 0) {
+      const BATCH_SIZE = 1000;
+      for (let i = 0; i < rows.length; i += BATCH_SIZE) {
+        const batch = rows.slice(i, i + BATCH_SIZE);
         try {
           await r2.send(
-            new DeleteObjectCommand({ Bucket: R2_BUCKET, Key: row.object_key }),
+            new DeleteObjectsCommand({
+              Bucket: R2_BUCKET,
+              Delete: { Objects: batch.map((r) => ({ Key: r.object_key })) },
+            }),
           );
         } catch (r2Err) {
-          console.error(
-            "R2 object delete failed:",
-            row.object_key,
-            r2Err.message,
-          );
+          console.error("R2 batch delete failed:", r2Err.message);
         }
       }
     }
@@ -908,16 +975,44 @@ app.get("/api/tags/suggest", async (req, res) => {
     .trim()
     .toLowerCase();
   if (!q) return res.json([]);
-  const safe = q.replace(/[\\%_]/g, (m) => `\\${m}`);
   try {
-    const { rows } = await pool.query(
-      `SELECT tag, count(*)::int AS n
-       FROM images
-       CROSS JOIN LATERAL unnest(string_to_array(lower(tags), ' ')) AS t(tag)
-       WHERE deleted = false AND tag LIKE $1
-       GROUP BY tag ORDER BY n DESC, tag ASC LIMIT 10`,
-      [`${safe}%`],
-    );
+    const words = q.split(/\s+/).filter(Boolean);
+    let rows;
+    if (words.length === 1 && words[0].length < 3) {
+      // Short single word: prefix match only
+      const safe = words[0].replace(/[\\%_]/g, (m) => `\\${m}`);
+      const { rows: r } = await pool.query(
+        `SELECT tag, count(*)::int AS n
+         FROM images
+         CROSS JOIN LATERAL unnest(string_to_array(lower(tags), ' ')) AS t(tag)
+         WHERE deleted = false AND tag LIKE $1
+         GROUP BY tag ORDER BY n DESC, tag ASC LIMIT 10`,
+        [`${safe}%`],
+      );
+      rows = r;
+    } else {
+      // Fuzzy match: for each word, find tags similar to it, then rank by
+      // best match across all words. Uses similarity (%) for per-word
+      // matching and similarity() for ranking.
+      const conditions = words.map((w, i) =>
+        `tag % $${i + 1}`,
+      ).join(" OR ");
+      const similarityExpr = words.map((w, i) =>
+        `similarity(tag, $${i + 1})`,
+      ).join(" + ");
+      const { rows: r } = await pool.query(
+        `SELECT tag, count(*)::int AS n,
+                (${similarityExpr}) AS score
+         FROM images
+         CROSS JOIN LATERAL unnest(string_to_array(lower(tags), ' ')) AS t(tag)
+         WHERE deleted = false AND (${conditions})
+         GROUP BY tag
+         ORDER BY score DESC, n DESC, tag ASC
+         LIMIT 10`,
+        words,
+      );
+      rows = r;
+    }
     res.json(rows);
   } catch (err) {
     console.error("Tag suggest failed:", err.message);
@@ -1109,7 +1204,7 @@ app.post("/api/ai/jobs", RATE_AI_JOBS, async (req, res) => {
   }
 });
 
-app.post("/api/ai/tag-all-untagged", async (_req, res) => {
+app.post("/api/ai/tag-all-untagged", RATE_AI_JOBS, async (_req, res) => {
   try {
     const { rows: images } = await pool.query(
       `SELECT object_key FROM images WHERE ai_tagged = false AND deleted = false`,
@@ -1249,7 +1344,7 @@ app.post("/api/ai/jobs/retry-failed", async (_req, res) => {
   }
 });
 
-app.post("/api/ai/jobs/cancel-all", async (_req, res) => {
+app.post("/api/ai/jobs/cancel-all", RATE_AI_JOBS, async (_req, res) => {
   try {
     const { rowCount } = await pool.query(
       `UPDATE ai_jobs SET status = 'canceled', finished_at = now()
@@ -1375,6 +1470,10 @@ server.on("error", (err) => {
   console.error("[app] Listener error:", err);
 });
 
+process.on("unhandledRejection", (reason) => {
+  console.error("[app] Unhandled rejection:", reason);
+});
+
 // JSON 404 for unmatched routes (including /api) and JSON error responses.
 app.use((req, res) => {
   res.status(404).json({ error: "not found" });
@@ -1396,14 +1495,37 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: "internal server error" });
 });
 
+let shuttingDown = false;
 function shutdown(signal) {
-  console.log(`[app] ${signal} received, shutting down`);
-  server.close(() => {
-    pool.end().finally(() => process.exit(0));
+  if (shuttingDown) return;
+  shuttingDown = true;
+  console.log(`[app] ${signal} received — draining connections`);
+
+  // Stop accepting new connections.
+  server.close(async () => {
+    console.log("[app] HTTP server closed");
+    try {
+      await pool.end();
+      console.log("[app] Database pool closed");
+    } catch (err) {
+      console.error("[app] Error closing pool:", err.message);
+    }
+    process.exit(0);
   });
-  setTimeout(() => process.exit(1), 5000).unref();
+
+  // Force-kill after 8 seconds if graceful shutdown stalls.
+  setTimeout(() => {
+    console.error("[app] Forced shutdown after timeout");
+    process.exit(1);
+  }, 8000).unref();
 }
 process.on("SIGTERM", () => shutdown("SIGTERM"));
 process.on("SIGINT", () => shutdown("SIGINT"));
+
+// Catch-all for unexpected errors so the process never silently dies.
+process.on("uncaughtException", (err) => {
+  console.error("[app] Uncaught exception:", err);
+  shutdown("uncaughtException");
+});
 
 export { app, server };

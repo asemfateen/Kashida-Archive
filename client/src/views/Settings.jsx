@@ -1,9 +1,8 @@
 import { useEffect, useState } from "react";
 import { getAiConfig, getAiStatus, patchAiConfig } from "../api.js";
-import { collections, savedSearches, feedback } from "../store.js";
+import { DEFAULT_PROMPT } from "../constants.js";
+import { collections, feedback } from "../store.js";
 import { pushError } from "../notify.jsx";
-
-const DEFAULT_PROMPT = "Give me 5 descriptive keywords for this image.";
 
 const SHORTCUTS = [
   ["Cmd/Ctrl + K", "Focus search anywhere"],
@@ -11,6 +10,15 @@ const SHORTCUTS = [
   ["← / →", "Previous / next asset in Detail"],
   ["Esc", "Close open dialogs"],
 ];
+
+const Row = ({ label, children }) => (
+  <div className="flex items-center justify-between gap-4 py-2.5 border-b border-outline-variant/50 dark:border-dark-outline-variant/50 last:border-0">
+    <span className="font-body-sm text-body-sm text-on-surface-variant">
+      {label}
+    </span>
+    <div className="flex items-center gap-2 text-right">{children}</div>
+  </div>
+);
 
 export default function Settings({ onBack, imageCount }) {
   const [prompt, setPrompt] = useState(DEFAULT_PROMPT);
@@ -43,9 +51,7 @@ export default function Settings({ onBack, imageCount }) {
       let data = {};
       try {
         data = await res.json();
-      } catch {
-        /* non-JSON body (e.g. maintenance page) */
-      }
+      } catch {}
       if (!res.ok || data.db === false) {
         setStatus({
           check: false,
@@ -69,14 +75,10 @@ export default function Settings({ onBack, imageCount }) {
       .then(({ config }) => {
         if (config?.master_prompt) setPrompt(config.master_prompt);
       })
-      .catch(() => {
-        /* AI config is best-effort here */
-      });
+      .catch(() => {});
     getAiStatus()
       .then(setAiStatus)
-      .catch(() => {
-        /* keep the row in its fallback state */
-      });
+      .catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -90,15 +92,6 @@ export default function Settings({ onBack, imageCount }) {
     setFeedbackList(feedback.list());
     setTimeout(() => setFeedbackSent(false), 2500);
   };
-
-  const Row = ({ label, children }) => (
-    <div className="flex items-center justify-between gap-4 py-2">
-      <span className="font-body-sm text-body-sm text-on-surface-variant">
-        {label}
-      </span>
-      <div className="flex items-center gap-2 text-right">{children}</div>
-    </div>
-  );
 
   return (
     <>
@@ -116,12 +109,12 @@ export default function Settings({ onBack, imageCount }) {
               Settings
             </h1>
           </div>
-          {/* System Status */}
-          <section className="bg-surface-container-lowest border border-outline-variant rounded-xl p-6">
-            <h2 className="font-title-sm text-title-sm text-on-surface mb-4">
+
+          <section className="bg-white dark:bg-dark-surface-container-high border border-black/5 dark:border-dark-outline-variant rounded-2xl shadow-soft dark:shadow-dark-soft p-6 transition-colors duration-300">
+            <h2 className="font-title-sm text-title-sm text-on-surface dark:text-dark-on-surface mb-4">
               System Status
             </h2>
-            <div className="flex flex-col gap-1">
+            <div className="flex flex-col">
               <Row label="API server">
                 {status.check ? (
                   <span className="font-body-sm text-body-sm text-on-surface-variant">
@@ -129,7 +122,7 @@ export default function Settings({ onBack, imageCount }) {
                   </span>
                 ) : status.ok ? (
                   <span className="flex items-center gap-1.5 font-body-sm text-body-sm text-tertiary-container">
-                    <span className="w-2 h-2 rounded-full bg-tertiary"></span>
+                    <span className="w-2 h-2 rounded-full bg-tertiary animate-pulse-soft"></span>
                     online
                   </span>
                 ) : (
@@ -149,11 +142,6 @@ export default function Settings({ onBack, imageCount }) {
                   {collections.list().length}
                 </span>
               </Row>
-              <Row label="Saved searches">
-                <span className="font-mono-data text-mono-data text-on-surface">
-                  {savedSearches.list().length}
-                </span>
-              </Row>
               <Row label="AI tagging">
                 {aiStatus?.configured ? (
                   <span className="flex items-center gap-1.5 font-body-sm text-body-sm text-tertiary">
@@ -161,7 +149,7 @@ export default function Settings({ onBack, imageCount }) {
                       className={`w-2 h-2 rounded-full ${
                         aiStatus.paused || aiStatus.quota?.rate_limited
                           ? "bg-amber-500"
-                          : "bg-tertiary"
+                          : "bg-tertiary animate-pulse-soft"
                       }`}
                     ></span>
                     {aiStatus.paused
@@ -184,18 +172,17 @@ export default function Settings({ onBack, imageCount }) {
             </div>
           </section>
 
-          {/* Master Prompt */}
-          <section className="bg-surface-container-lowest border border-outline-variant rounded-xl p-6">
+          <section className="bg-white dark:bg-dark-surface-container-high border border-black/5 dark:border-dark-outline-variant rounded-2xl shadow-soft dark:shadow-dark-soft p-6 transition-colors duration-300">
             <div className="flex items-center justify-between mb-1">
-              <h2 className="font-title-sm text-title-sm text-on-surface">
+              <h2 className="font-title-sm text-title-sm text-on-surface dark:text-dark-on-surface">
                 Master AI Tagging Prompt
               </h2>
               <button
                 onClick={savePrompt}
-                className={`px-4 py-1.5 rounded-lg font-label-caps text-label-caps transition-colors ${
+                className={`px-4 py-1.5 rounded-full font-label-caps text-label-caps transition-all duration-200 ${
                   saved
                     ? "bg-tertiary-fixed text-on-tertiary-fixed-variant"
-                    : "bg-tertiary text-on-tertiary hover:bg-tertiary-container"
+                    : "bg-midnight-ink dark:bg-dark-primary-container text-white dark:text-dark-on-primary hover:bg-prussian-navy dark:hover:opacity-90 active:scale-95"
                 }`}
               >
                 {saved ? "Saved" : "Save Prompt"}
@@ -203,43 +190,38 @@ export default function Settings({ onBack, imageCount }) {
             </div>
             <p className="font-body-sm text-body-sm text-on-surface-variant mb-3">
               Used when you AI-tag any image (Cmd/Ctrl+T in the asset viewer, or
-              the AI button next to Tags). Saved to the server — the AI Control
-              page can edit it too.
+              the AI button next to Tags). Saved to the server.
             </p>
             <textarea
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
               rows={4}
-              className="w-full bg-surface-bright border border-outline-variant rounded px-3 py-2 text-body-sm text-on-surface focus:border-tertiary-container focus:ring-1 focus:ring-tertiary-container outline-none transition-colors resize-y"
+              className="w-full bg-surface-container-low dark:bg-dark-surface-container-highest border border-outline-variant dark:border-dark-outline-variant rounded-xl px-3 py-2.5 text-body-sm text-on-surface dark:text-dark-on-surface focus:border-midnight-ink dark:focus:border-dark-primary focus:ring-2 focus:ring-midnight-ink/10 dark:focus:ring-dark-primary/20 outline-none transition-all duration-200 resize-y"
               placeholder="e.g. extract exact text and objects"
             />
           </section>
 
-          {/* Keyboard Shortcuts */}
-          <section className="bg-surface-container-lowest border border-outline-variant rounded-xl p-6">
-            <h2 className="font-title-sm text-title-sm text-on-surface mb-4">
+          <section className="bg-white dark:bg-dark-surface-container-high border border-black/5 dark:border-dark-outline-variant rounded-2xl shadow-soft dark:shadow-dark-soft p-6 transition-colors duration-300">
+            <h2 className="font-title-sm text-title-sm text-on-surface dark:text-dark-on-surface mb-4">
               Keyboard Shortcuts
             </h2>
-            <div className="flex flex-col gap-2">
+            <div className="flex flex-col">
               {SHORTCUTS.map(([keys, action]) => (
                 <div
                   key={keys}
-                  className="flex items-center justify-between py-1.5 border-b border-outline-variant last:border-0"
+                  className="flex items-center justify-between py-3 border-b border-outline-variant/50 dark:border-dark-outline-variant/50 last:border-0"
                 >
                   <span className="font-body-sm text-body-sm text-on-surface">
                     {action}
                   </span>
-                  <kbd className="bg-surface-container-high border border-outline-variant rounded px-2 py-0.5 font-mono-data text-mono-data text-xs">
-                    {keys}
-                  </kbd>
+                  <kbd className="kbd-key">{keys}</kbd>
                 </div>
               ))}
             </div>
           </section>
 
-          {/* Feedback */}
-          <section className="bg-surface-container-lowest border border-outline-variant rounded-xl p-6">
-            <h2 className="font-title-sm text-title-sm text-on-surface mb-1">
+          <section className="bg-white dark:bg-dark-surface-container-high border border-black/5 dark:border-dark-outline-variant rounded-2xl shadow-soft dark:shadow-dark-soft p-6 transition-colors duration-300">
+            <h2 className="font-title-sm text-title-sm text-on-surface dark:text-dark-on-surface mb-1">
               Feedback
             </h2>
             <p className="font-body-sm text-body-sm text-on-surface-variant mb-3">
@@ -251,17 +233,17 @@ export default function Settings({ onBack, imageCount }) {
                 value={feedbackText}
                 onChange={(e) => setFeedbackText(e.target.value)}
                 rows={3}
-                className="w-full bg-surface-bright border border-outline-variant rounded px-3 py-2 text-body-sm text-on-surface focus:border-tertiary-container focus:ring-1 focus:ring-tertiary-container outline-none transition-colors resize-y"
+                className="w-full bg-surface-container-low dark:bg-dark-surface-container-highest border border-outline-variant dark:border-dark-outline-variant rounded-xl px-3 py-2.5 text-body-sm text-on-surface dark:text-dark-on-surface focus:border-midnight-ink dark:focus:border-dark-primary focus:ring-2 focus:ring-midnight-ink/10 dark:focus:ring-dark-primary/20 outline-none transition-all duration-200 resize-y"
                 placeholder="Your feedback..."
               />
               <div className="flex justify-end">
                 <button
                   type="submit"
                   disabled={!feedbackText.trim()}
-                  className={`px-4 py-2 rounded-lg font-label-caps text-label-caps transition-colors ${
+                  className={`px-4 py-2 rounded-full font-label-caps text-label-caps transition-all duration-200 active:scale-95 ${
                     feedbackSent
                       ? "bg-tertiary-fixed text-on-tertiary-fixed-variant"
-                      : "bg-tertiary text-on-tertiary hover:bg-tertiary-container disabled:opacity-50"
+                      : "bg-midnight-ink dark:bg-dark-primary-container text-white dark:text-dark-on-primary hover:bg-prussian-navy dark:hover:opacity-90 disabled:opacity-50"
                   }`}
                 >
                   {feedbackSent ? "Thanks!" : "Send Feedback"}
@@ -280,7 +262,7 @@ export default function Settings({ onBack, imageCount }) {
                   .map((f) => (
                     <div
                       key={f.id}
-                      className="bg-surface-container-low rounded-lg p-3"
+                      className="bg-surface-container-low dark:bg-dark-surface-container-highest rounded-xl p-3"
                     >
                       <p className="font-body-sm text-body-sm text-on-surface">
                         {f.text}
